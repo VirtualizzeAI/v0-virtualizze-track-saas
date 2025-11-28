@@ -4,12 +4,6 @@ import { defineConfig } from "vite"
 
 export default defineConfig({
   plugins: [tailwindcss(), sveltekit()],
-  optimizeDeps: {
-    include: ["lucide-svelte"],
-  },
-   ssr: {
-    noExternal: ['lucide-svelte']
-  },
   build: {
     target: "esnext",
     minify: "esbuild",
@@ -27,5 +21,5 @@ export default defineConfig({
     fs: {
       strict: false,
     },
-  }
+  },
 })
