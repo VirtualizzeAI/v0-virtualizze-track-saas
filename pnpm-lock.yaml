@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      lucide-svelte:
+        specifier: latest
+        version: 0.555.0(svelte@5.45.2)
     devDependencies:
       '@sveltejs/adapter-auto':
         specifier: ^6.0.0
@@ -20,9 +24,6 @@ importers:
       '@tailwindcss/vite':
         specifier: ^4.0.0
         version: 4.1.17(vite@6.4.1(jiti@2.6.1)(lightningcss@1.30.2))
-      lucide-svelte:
-        specifier: latest
-        version: 0.555.0(svelte@5.45.2)
       prettier:
         specifier: ^3.4.2
         version: 3.7.1
