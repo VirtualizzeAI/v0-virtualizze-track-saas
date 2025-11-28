@@ -1,1 +1,1 @@
-export { default as component } from "../../../../src/routes/disparo/+page.svelte";
+export { default as component } from "../../../../src/routes/dashboard/+page.svelte";

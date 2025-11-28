@@ -10,10 +10,6 @@ const config = {
     alias: {
       $lib: "src/lib",
       "$lib/*": "src/lib/*",
-    },
-    vite: {
-      optimizeDeps: { include: ['lucide-svelte'] },
-      ssr: { noExternal: ['lucide-svelte'] }
     }
   },
 
