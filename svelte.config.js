@@ -11,6 +11,10 @@ const config = {
       $lib: "src/lib",
       "$lib/*": "src/lib/*",
     },
+    vite: {
+      optimizeDeps: { include: ['lucide-svelte'] },
+      ssr: { noExternal: ['lucide-svelte'] }
+    }
   },
 
   compilerOptions: {
