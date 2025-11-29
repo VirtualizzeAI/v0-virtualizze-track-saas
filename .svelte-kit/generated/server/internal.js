@@ -1,4 +1,3 @@
-
 import root from '../root.js';
 import { set_building, set_prerendering } from '__sveltekit/environment';
 import { set_assets } from '$app/paths/internal/server';

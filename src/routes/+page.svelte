@@ -2,13 +2,13 @@
   import { goto } from '$app/navigation'
   import { onMount } from 'svelte'
   import { authStore } from '$lib/stores/auth.svelte'
-  // Removed import desnecessário do 'get' do svelte/store que causava erro
+  import { get } from 'svelte/store'
 
   const { user, isAuthenticated, isSuperAdmin, login, resetPassword } = authStore
 
   onMount(() => {
-    if (isAuthenticated.value) {
-      if (isSuperAdmin.value) {
+    if (get(isAuthenticated)) {
+      if (get(isSuperAdmin)) {
         goto('/super-admin')
       } else {
         goto('/dashboard')
@@ -39,7 +39,7 @@
     loading = false
 
     if (result.success) {
-      if (isSuperAdmin.value) {
+      if (get(isSuperAdmin)) {
         goto('/super-admin')
       } else {
         goto('/dashboard')
@@ -79,7 +79,7 @@
 <div class="min-h-screen flex items-center justify-center bg-background p-4">
   <div class="w-full max-w-md">
     <div class="text-center mb-8">
-      <img src="/header.png" style="width: 400px; margin: auto;">
+      <img src="/header.png" alt="Virtualizze Track Header" style="width: 400px; margin: auto;">
 
       <!-- <h1 class="text-3xl font-bold text-foreground tracking-tight">Virtualizze Track</h1> -->
       <!-- <p class="text-muted-foreground mt-2">Sistema de Gestão de Leads</p> -->
@@ -190,7 +190,7 @@
 
             {#if resetSuccess}
               <div class="bg-green-600/10 border border-green-600/20 rounded-lg p-3">
-                <p class="text-sm text-green-500">Email de recuperação enviado com sucesso!</p>
+                <p class="text-sm text-green-500">Se existir um acesso com esse endereço de e-mail, em breve chegará o email de recuperação!</p>
               </div>
             {/if}
 
