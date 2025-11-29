@@ -12,6 +12,10 @@
   const CREATE_CLASS_WEBHOOK = 'https://auto.agiussolar.cloud/webhook/criar-turma';
   const GET_COURSES_WEBHOOK = 'https://auto.agiussolar.cloud/webhook/listar-cursos';
   const GET_CLASSES_WEBHOOK = 'https://auto.agiussolar.cloud/webhook/listar-turmas';
+  const UPDATE_COURSE_WEBHOOK = 'https://auto.agiussolar.cloud/webhook/editar-curso';
+  const UPDATE_CLASS_WEBHOOK = 'https://auto.agiussolar.cloud/webhook/editar-turma';
+  const DELETE_COURSE_WEBHOOK = 'https://auto.agiussolar.cloud/webhook/excluir-curso';
+  const DELETE_CLASS_WEBHOOK = 'https://auto.agiussolar.cloud/webhook/excluir-turma';
 
   // States
   let activeTab = $state('courses');
@@ -22,8 +26,8 @@
   // Modal states
   let showCourseModal = $state(false);
   let showClassModal = $state(false);
-  let editingCourse = null;
-  let editingClass = null;
+  let editingCourse = $state(null);
+  let editingClass = $state(null);
 
   // Form data - Curso
   let courseForm = $state({
@@ -97,13 +101,15 @@
     }
 
     try {
-      const response = await fetch(CREATE_COURSE_WEBHOOK, {
+      const webhook = editingCourse ? UPDATE_COURSE_WEBHOOK : CREATE_COURSE_WEBHOOK;
+      const payload = editingCourse
+        ? { ...courseForm, id: editingCourse.id, company_id: userValue?.companyId }
+        : { ...courseForm, company_id: userValue?.companyId };
+
+      const response = await fetch(webhook, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...courseForm,
-          company_id: userValue?.companyId
-        })
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
@@ -127,13 +133,15 @@
     }
 
     try {
-      const response = await fetch(CREATE_CLASS_WEBHOOK, {
+      const webhook = editingClass ? UPDATE_CLASS_WEBHOOK : CREATE_CLASS_WEBHOOK;
+      const payload = editingClass
+        ? { ...classForm, id: editingClass.id, company_id: userValue?.companyId }
+        : { ...classForm, company_id: userValue?.companyId };
+
+      const response = await fetch(webhook, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...classForm,
-          company_id: userValue?.companyId
-        })
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
@@ -177,6 +185,73 @@
     showClassModal = true;
   }
 
+  function editCourse(course) {
+    editingCourse = course;
+    courseForm = {
+      name: course.name,
+      category: course.category,
+      duration: course.duration || ''
+    };
+    showCourseModal = true;
+  }
+
+  function editClass(classItem) {
+    editingClass = classItem;
+    classForm = {
+      class_name: classItem.class_name,
+      course_id: classItem.course_id,
+      days_of_week: classItem.days_of_week || '',
+      schedule: classItem.schedule || '',
+      start_date: classItem.start_date,
+      is_active: classItem.is_active
+    };
+    showClassModal = true;
+  }
+
+  async function deleteCourse(courseId) {
+    if (!confirm('Tem certeza que deseja excluir este curso?')) return;
+
+    try {
+      const response = await fetch(DELETE_COURSE_WEBHOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: courseId, company_id: userValue?.companyId })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await loadCourses();
+      } else {
+        alert('Erro ao excluir curso');
+      }
+    } catch (error) {
+      console.error('[v0] Erro ao excluir curso:', error);
+      alert('Erro ao conectar com o servidor');
+    }
+  }
+
+  async function deleteClass(classId) {
+    if (!confirm('Tem certeza que deseja excluir esta turma?')) return;
+
+    try {
+      const response = await fetch(DELETE_CLASS_WEBHOOK, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: classId, company_id: userValue?.companyId })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await loadClasses();
+      } else {
+        alert('Erro ao excluir turma');
+      }
+    } catch (error) {
+      console.error('[v0] Erro ao excluir turma:', error);
+      alert('Erro ao conectar com o servidor');
+    }
+  }
+
   onDestroy(() => {
     // Unsubscribe logic here if needed
   });
@@ -185,7 +260,6 @@
 <div class="flex min-h-screen bg-zinc-950">
   <Sidebar currentPath="/cursos" bind:collapsed={sidebarCollapsed} />
 
-  <!-- Main Content com margem dinâmica -->
   <main
     class="flex-1 transition-all duration-300"
     style="margin-left: {sidebarCollapsed ? '5rem' : '16rem'}"
@@ -200,6 +274,7 @@
       <!-- Tabs -->
       <div class="flex gap-2 mb-6 border-b border-zinc-800">
         <button
+          aria-label="Cursos"
           onclick={() => activeTab = 'courses'}
           class="px-6 py-3 text-sm font-medium transition-colors relative {activeTab === 'courses'
             ? 'text-green-500'
@@ -216,6 +291,7 @@
           {/if}
         </button>
         <button
+          aria-label="Turmas"
           onclick={() => activeTab = 'classes'}
           class="px-6 py-3 text-sm font-medium transition-colors relative {activeTab === 'classes'
             ? 'text-green-500'
@@ -239,6 +315,7 @@
           <div class="flex justify-between items-center mb-4">
             <h2 class="text-xl font-semibold text-white">Lista de Cursos</h2>
             <button
+              aria-label="Novo Curso"
               onclick={openCourseModal}
               class="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
             >
@@ -261,7 +338,31 @@
             <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {#each courses as course}
                 <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-6 hover:border-green-600/50 transition-colors">
-                  <h3 class="text-lg font-semibold text-white mb-2">{course.name}</h3>
+                  <div class="flex items-start justify-between mb-2">
+                    <h3 class="text-lg font-semibold text-white">{course.name}</h3>
+                    <div class="flex gap-2">
+                      <button
+                        aria-label="Editar Curso"
+                        onclick={() => editCourse(course)}
+                        class="p-1 text-zinc-400 hover:text-green-500 transition-colors"
+                        title="Editar"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                      </button>
+                      <button
+                        aria-label="Excluir Curso"
+                        onclick={() => deleteCourse(course.id)}
+                        class="p-1 text-zinc-400 hover:text-red-500 transition-colors"
+                        title="Excluir"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
                   <p class="text-sm text-zinc-400 mb-1">Categoria: {course.category}</p>
                   {#if course.duration}
                     <p class="text-sm text-zinc-400 mb-4">Duração: {course.duration}</p>
@@ -279,6 +380,7 @@
           <div class="flex justify-between items-center mb-4">
             <h2 class="text-xl font-semibold text-white">Lista de Turmas</h2>
             <button
+              aria-label="Nova Turma"
               onclick={openClassModal}
               class="flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors"
             >
@@ -303,9 +405,31 @@
                 <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-6 hover:border-green-600/50 transition-colors">
                   <div class="flex items-start justify-between mb-4">
                     <h3 class="text-lg font-semibold text-white">{classItem.class_name}</h3>
-                    <span class="px-2 py-1 text-xs rounded {classItem.is_active ? 'bg-green-600/20 text-green-500' : 'bg-zinc-700 text-zinc-400'}">
-                      {classItem.is_active ? 'Ativa' : 'Inativa'}
-                    </span>
+                    <div class="flex items-center gap-2">
+                      <span class="px-2 py-1 text-xs rounded {classItem.is_active ? 'bg-green-600/20 text-green-500' : 'bg-zinc-700 text-zinc-400'}">
+                        {classItem.is_active ? 'Ativa' : 'Inativa'}
+                      </span>
+                      <button
+                        aria-label="Editar Turma"
+                        onclick={() => editClass(classItem)}
+                        class="p-1 text-zinc-400 hover:text-green-500 transition-colors"
+                        title="Editar"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
+                        </svg>
+                      </button>
+                      <button
+                        aria-label="Excluir Turma"
+                        onclick={() => deleteClass(classItem.id)}
+                        class="p-1 text-zinc-400 hover:text-red-500 transition-colors"
+                        title="Excluir"
+                      >
+                        <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                        </svg>
+                      </button>
+                    </div>
                   </div>
                   <div class="space-y-2 text-sm text-zinc-400">
                     {#if classItem.course_name}
@@ -336,11 +460,11 @@
   </main>
 </div>
 
-<!-- Modal Novo Curso -->
+<!-- Modal Novo/Editar Curso -->
 {#if showCourseModal}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
     <div class="bg-zinc-900 rounded-lg border border-zinc-800 max-w-md w-full p-6">
-      <h2 class="text-xl font-bold text-white mb-6">Novo Curso</h2>
+      <h2 class="text-xl font-bold text-white mb-6">{editingCourse ? 'Editar Curso' : 'Novo Curso'}</h2>
 
       <div class="space-y-4">
         <div>
@@ -395,11 +519,11 @@
   </div>
 {/if}
 
-<!-- Modal Nova Turma -->
+<!-- Modal Nova/Editar Turma -->
 {#if showClassModal}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
     <div class="bg-zinc-900 rounded-lg border border-zinc-800 max-w-md w-full p-6 max-h-[90vh] overflow-y-auto">
-      <h2 class="text-xl font-bold text-white mb-6">Nova Turma</h2>
+      <h2 class="text-xl font-bold text-white mb-6">{editingClass ? 'Editar Turma' : 'Nova Turma'}</h2>
 
       <div class="space-y-4">
         <div>
