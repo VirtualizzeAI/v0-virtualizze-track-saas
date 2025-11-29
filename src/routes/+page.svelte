@@ -79,7 +79,7 @@
 <div class="min-h-screen flex items-center justify-center bg-background p-4">
   <div class="w-full max-w-md">
     <div class="text-center mb-8">
-      <img src="../../static/header.png" style="width: 400px; margin: auto;">
+      <img src="/header.png" style="width: 400px; margin: auto;">
 
       <!-- <h1 class="text-3xl font-bold text-foreground tracking-tight">Virtualizze Track</h1> -->
       <!-- <p class="text-muted-foreground mt-2">Sistema de Gestão de Leads</p> -->
