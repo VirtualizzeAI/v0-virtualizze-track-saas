@@ -19,7 +19,7 @@
     email: string;
     password?: string;
     phone: string;
-    role: 'funcionario' | 'coordenador' | 'direcao';
+    role: 'funcionario' | 'coordenador' | 'direcao' | 'franqueadora';
     companyId: number;
     companyName?: string;
   }
@@ -49,7 +49,8 @@
   const roleLabels = {
     funcionario: 'Funcionário',
     coordenador: 'Coordenador',
-    direcao: 'Direção'
+    direcao: 'Direção',
+    franqueadora: 'Franqueadora'
   };
 
   // Function to fetch companies from the API
@@ -63,7 +64,7 @@
 
       if (response.ok) {
         const data = await response.json();
-        companies = Array.isArray(data) ? data.map((company: any) => ({
+        companies = Array.isArray(data.companies) ? data.companies.map((company: any) => ({
           id: company?.id || 0,
           name: company?.name || '',
           cnpj: company?.cnpj || '',
@@ -109,7 +110,6 @@
             companyName: company?.name || 'Sem empresa'
           };
         }) : [];
-        console.log('[v0] Usuários carregados:', users);
       }
     } catch (err) {
       console.error('Erro ao buscar usuários:', err);
@@ -256,7 +256,6 @@
 
   // Function to open edit user modal
   function openEditUserModal(user: AdminUser) {
-    console.log('[v0] Usuário recebido para editar:', user);
     isEditingUser = true;
     // Garantir que companyId seja número válido
     const companyIdValue = user.companyId;
@@ -271,26 +270,16 @@
     };
     error = '';
     showUserModal = true;
-    console.log('[v0] currentUser após abrir modal:', currentUser);
-    console.log('[v0] companyId final:', currentUser.companyId, 'tipo:', typeof currentUser.companyId);
+  
   }
 
   // Function to handle user submit
   async function handleUserSubmit() {
-    console.log('[v0] Validando campos do usuário:', {
-      name: currentUser?.name,
-      email: currentUser?.email,
-      phone: currentUser?.phone,
-      companyId: currentUser?.companyId,
-      companyIdType: typeof currentUser?.companyId,
-      password: currentUser?.password,
-      isEditingUser
-    });
+  
 
     // Validate required fields
     if (!currentUser?.name || !currentUser?.email || !currentUser?.phone) {
       error = 'Preencha todos os campos obrigatórios';
-      console.log('[v0] Validação falhou: campos vazios');
       return;
     }
 
@@ -300,13 +289,11 @@
 
     if (!companyId || isNaN(companyId)) {
       error = 'Selecione uma empresa';
-      console.log('[v0] Validação falhou: empresa não selecionada. companyId:', companyId);
       return;
     }
 
     if (!isEditingUser && !currentUser?.password) {
       error = 'Senha é obrigatória para novos usuários';
-      console.log('[v0] Validação falhou: senha não preenchida');
       return;
     }
 
@@ -319,7 +306,6 @@
       ...currentUser,
       companyId: companyId
     };
-    console.log('[v0] Enviando dados para webhook:', WEBHOOK_URL, userToSend);
 
     try {
       const response = await fetch(WEBHOOK_URL, {
@@ -329,7 +315,6 @@
       });
 
       if (response.ok) {
-        console.log('[v0] Usuário salvo com sucesso');
         await fetchUsers();
         showUserModal = false;
         error = '';
@@ -345,7 +330,6 @@
         };
       } else {
         error = 'Erro ao salvar usuário';
-        console.log('[v0] Erro ao salvar usuário:', response.status);
       }
     } catch (err) {
       console.error('Erro ao salvar usuário:', err);

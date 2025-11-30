@@ -7,18 +7,27 @@
   
   let showDropdown = $state(false);
   let searchTerm = $state('');
+  let companiesList: Array<{id: number, name: string}> = [];
   
-  // Filtrar empresas pelo termo de busca
-  const filteredCompanies = $derived(
-    get(companies).filter(c => 
-      c.name.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+  const filteredCompanies = companiesList.filter(c => 
+    c.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
   
   onMount(() => {
-    if (get(isFranqueadora)) {
-      fetchCompanies();
-    }
+    const unsubFranqueadora = isFranqueadora.subscribe((value) => {
+      if (value) {
+        fetchCompanies();
+      }
+    });
+    
+    const unsubCompanies = companies.subscribe((value) => {
+      companiesList = value || [];
+    });
+    
+    return () => {
+      unsubFranqueadora();
+      unsubCompanies();
+    };
   });
   
   function handleSelectCompany(company: { id: number; name: string } | null) {

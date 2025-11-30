@@ -20,11 +20,12 @@
     confirmPassword: ''
   });
 
-  const roleLabels = {
+  const roleLabels: Record<string, string> = {
     funcionario: 'Funcionário',
     coordenador: 'Coordenador',
     direcao: 'Direção',
-    super_admin: 'Super Administrador'
+    super_admin: 'Super Administrador',
+    franqueadora: 'Franqueadora'
   };
 
   onMount(() => {

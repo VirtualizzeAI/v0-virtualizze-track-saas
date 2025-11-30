@@ -62,8 +62,10 @@ function createAuthStore() {
   )
 
   const effectiveCompanyId = derived([user, selectedCompany], ([$user, $selectedCompany]) => {
-    if ($user?.role === "franqueadora" && $selectedCompany) {
-      return $selectedCompany.id
+    if ($user?.role === "franqueadora") {
+      // Se selecionou empresa, retorna o ID dela
+      // Se não selecionou, retorna null (interpretado como "todos os dados")
+      return $selectedCompany ? $selectedCompany.id : null
     }
     return $user?.companyId || null
   })

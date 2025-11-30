@@ -4,11 +4,9 @@
   import { authStore } from '$lib/stores/auth.svelte';
   import Sidebar from '$lib/components/layout/sidebar.svelte';
   import PeriodSelector from '$lib/components/dashboard/period-selector.svelte';
-  import CompanyFilter from '$lib/components/layout/company-filter.svelte';
-  import { get } from 'svelte/store';
   import StatCard from '$lib/components/dashboard/stat-card.svelte';
 
-  const { user, isAuthenticated, isFranqueadora, selectedCompany, effectiveCompanyId } = authStore;
+  const { user, selectedCompany } = authStore;
 
   let sidebarCollapsed = $state(false);
   let selectedPeriod = $state('hoje');
@@ -16,6 +14,10 @@
   let isLoading = $state(true);
   let currentPage = $state(1);
   const itemsPerPage = 10;
+
+  let isFranqueadoraLocal = $state(false);
+  let selectedCompanyLocal = $state<{id: number, name: string} | null>(null);
+  let companyIdToUse = $state<number | null>(null);
 
   let dashboardData = $state({
     totalLeads: 0,
@@ -31,30 +33,46 @@
 
   let maxDailyLeads = $state(0);
   let maxCourseCount = $state(0);
-  let paginatedLeads = $state([] as Array<{name: string, category: string, course: string, phone: string, data_cadastro: string}>);
+  let paginatedLeads = $state<Array<{name: string, category: string, course: string, phone: string, data_cadastro: string}>>([]);
   let totalPages = $state(0);
 
   onMount(() => {
-    const unsubAuth = isAuthenticated.subscribe((value) => {
+    const unsubUser = user.subscribe((value) => {
       if (!value) {
         goto('/');
-      } else {
-        isLoading = false;
-        if (!get(isFranqueadora)) {
+        return;
+      }
+      
+      isLoading = false;
+      isFranqueadoraLocal = value.role === 'franqueadora';
+      
+      // Para outros usuários, usar o companyId do usuário
+      if (isFranqueadoraLocal) {
+        // Franqueadora sem empresa selecionada: carregar todos os dados
+        if (!selectedCompanyLocal) {
+          companyIdToUse = 0; // 0 significa todos
           fetchDashboardData(selectedPeriod);
         }
+      } else {
+        companyIdToUse = value.companyId;
+        fetchDashboardData(selectedPeriod);
       }
     });
 
-    // Subscribe para detectar mudança de empresa selecionada (franqueadora)
     const unsubCompany = selectedCompany.subscribe((company) => {
-      if (get(isFranqueadora) && company) {
+      selectedCompanyLocal = company;
+      if (isFranqueadoraLocal) {
+        if (company) {
+          companyIdToUse = company.id;
+        } else {
+          companyIdToUse = 0; // Todos os dados
+        }
         fetchDashboardData(selectedPeriod);
       }
     });
 
     return () => {
-      unsubAuth();
+      unsubUser();
       unsubCompany();
     };
   });
@@ -62,25 +80,15 @@
   async function fetchDashboardData(period: string) {
     const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/dashboard';
 
-    const companyId = get(effectiveCompanyId);
-    const franqueadora = get(isFranqueadora);
-    
-    if (!companyId && !franqueadora) {
-      console.error('[v0] Não é possível buscar dashboard sem companyId');
-      return;
-    }
-    
-    if (franqueadora && !get(selectedCompany)) {
-      return;
-    }
-
     loading = true;
 
     try {
       const getPeriod = {
         periodo: period,
-        companyId: companyId
+        companyId: companyIdToUse // Pode ser 0 para todos os dados
       };
+
+      console.log('[v0] Buscando dashboard com:', getPeriod);
 
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
@@ -143,27 +151,16 @@
   <Sidebar currentPath="/dashboard" bind:collapsed={sidebarCollapsed} />
   
   <main class="transition-all duration-300 {sidebarCollapsed ? 'ml-20' : 'ml-64'} p-8">
-    <!-- Header com filtro de empresa para franqueadora -->
+    <!-- Header -->
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
       <div>
         <h1 class="text-3xl font-bold text-white">Dashboard</h1>
         <p class="text-zinc-400 mt-1">Visão geral dos seus leads e métricas</p>
       </div>
-      
-      <!-- Filtro de empresa apenas para franqueadora -->
-      <CompanyFilter />
     </div>
     
-    <!-- Aviso se franqueadora não selecionou empresa -->
-    {#if $isFranqueadora && !$selectedCompany}
-      <div class="bg-zinc-900 border border-yellow-600/50 rounded-xl p-8 text-center">
-        <svg class="w-16 h-16 text-yellow-500 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
-        </svg>
-        <h2 class="text-xl font-semibold text-white mb-2">Selecione uma Empresa</h2>
-        <p class="text-zinc-400">Use o filtro acima para selecionar a empresa que deseja visualizar os dados.</p>
-      </div>
-    {:else if isLoading}
+    <!-- Usar variáveis locais em vez de $store -->
+    {#if isLoading}
       <div class="flex items-center justify-center py-12">
         <div class="text-center">
           <div class="w-12 h-12 border-4 border-green-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
@@ -171,6 +168,18 @@
         </div>
       </div>
     {:else}
+      <!-- Indicador de empresa selecionada para franqueadora -->
+      {#if isFranqueadoraLocal}
+        <div class="mb-4 px-4 py-2 rounded-lg inline-flex items-center gap-2 {selectedCompanyLocal ? 'bg-green-600/20 border border-green-600/50' : 'bg-blue-600/20 border border-blue-600/50'}">
+          <svg class="w-4 h-4 {selectedCompanyLocal ? 'text-green-500' : 'text-blue-500'}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/>
+          </svg>
+          <span class="{selectedCompanyLocal ? 'text-green-500' : 'text-blue-500'} text-sm font-medium">
+            {selectedCompanyLocal ? `Visualizando: ${selectedCompanyLocal.name}` : 'Visualizando: Todas as Empresas'}
+          </span>
+        </div>
+      {/if}
+
       <!-- Period Selector -->
       <div class="mb-8">
         <PeriodSelector {selectedPeriod} onPeriodChange={handlePeriodChange} />

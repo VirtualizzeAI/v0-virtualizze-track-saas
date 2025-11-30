@@ -4,8 +4,10 @@
   import { authStore } from '$lib/stores/auth.svelte';
   import Sidebar from '$lib/components/layout/sidebar.svelte';
 
+  const auth = authStore;
+
   let isAuthenticated = false;
-  let user = null;
+  let userValue: any = null;
   let leads = $state([]);
   let loading = $state(false);
   let searchTerm = $state('');
@@ -31,9 +33,13 @@
 
   let categories = ['todos', 'Técnico', 'Profissionalizante', 'Superior', 'Indisponivel'];
   let courses = $state(['todos']);
-  let registeredCourses = $state([]); // Cursos cadastrados no sistema
+  let registeredCourses = $state([]);
   let sellers = $state(['todos']);
   let dates = $state(['todos']);
+
+  let isFranqueadoraValue = $state(false);
+  let effectiveCompanyIdValue = null;
+  let selectedCompanyValue = $state({id: 0, name: ''});
 
   function normalizeText(text: string): string {
     return text
@@ -42,38 +48,37 @@
       .toLowerCase();
   }
 
-  const filteredLeads = () => leads.filter(lead => {
+  const filteredLeads = () => {
     if (!isAuthenticated) {
       return [];
     }
     const normalizedSearch = normalizeText(searchTerm);
-    const matchesSearch = 
+    const matchesSearch = (lead: any) =>
       normalizeText(lead.name || '').includes(normalizedSearch) ||
       normalizeText(lead.email || '').includes(normalizedSearch) ||
       lead.phone?.includes(searchTerm);
     
     // Categoria "Indisponivel" filtra os que NÃO são Técnico, Profissionalizante ou Superior
-    let matchesCategory = filterCategory === 'todos';
-    if (!matchesCategory) {
+    const matchesCategory = (lead: any) => {
+      if (filterCategory === 'todos') return true;
       if (filterCategory === 'Indisponivel') {
         const validCategories = ['técnico', 'profissionalizante', 'superior'];
-        matchesCategory = !validCategories.includes(lead.category?.toLowerCase());
-      } else {
-        matchesCategory = lead.category?.toLowerCase() === filterCategory.toLowerCase();
+        return !validCategories.includes(lead.category?.toLowerCase());
       }
-    }
+      return lead.category?.toLowerCase() === filterCategory.toLowerCase();
+    };
     
-    const matchesCourse = filterCourse === 'todos' || lead.course?.toLowerCase() === filterCourse.toLowerCase();
-    const matchesSeller = filterSeller === 'todos' || lead.seller?.toLowerCase() === filterSeller.toLowerCase();
+    const matchesCourse = (lead: any) => filterCourse === 'todos' || lead.course?.toLowerCase() === filterCourse.toLowerCase();
+    const matchesSeller = (lead: any) => filterSeller === 'todos' || lead.seller?.toLowerCase() === filterSeller.toLowerCase();
     
-    let matchesDate = filterDate === 'todos';
-    if (!matchesDate && filterDate !== 'todos') {
+    const matchesDate = (lead: any) => {
+      if (filterDate === 'todos') return true;
       const leadDateFormatted = formatDate(lead.firstContact);
-      matchesDate = leadDateFormatted === filterDate;
-    }
+      return leadDateFormatted === filterDate;
+    };
 
-    return matchesSearch && matchesCategory && matchesCourse && matchesSeller && matchesDate;
-  });
+    return leads.filter((lead: any) => matchesSearch(lead) && matchesCategory(lead) && matchesCourse(lead) && matchesSeller(lead) && matchesDate(lead));
+  };
 
   function formatDate(dateString: string): string {
     if (!dateString) return '';
@@ -101,37 +106,58 @@
   }
 
   onMount(() => {
-    const unsubAuth = authStore.isAuthenticated.subscribe((value) => {
+    const unsubAuth = auth.isAuthenticated.subscribe((value) => {
       isAuthenticated = value;
       if (!value) {
         goto('/');
       }
     });
     
-    const unsubUser = authStore.user.subscribe((value) => {
-      user = value;
+    const unsubUser = auth.user.subscribe((value) => {
+      userValue = value;
       if (value?.companyId && leads.length === 0 && !loading) {
-        fetchCourses(); // Buscar cursos cadastrados primeiro
+        fetchCourses();
         fetchLeads();
+      }
+    });
+
+    const unsubFranqueadora = auth.isFranqueadora.subscribe(value => {
+      isFranqueadoraValue = value;
+    });
+    
+    const unsubSelectedCompany = auth.selectedCompany.subscribe(value => {
+      selectedCompanyValue = value;
+    });
+    
+    const unsubEffectiveCompany = auth.effectiveCompanyId.subscribe(value => {
+      effectiveCompanyIdValue = value;
+      // Recarregar dados quando a empresa mudar
+      if (value && userValue) {
+        fetchLeads();
+        fetchCourses();
       }
     });
 
     return () => {
       unsubAuth();
       unsubUser();
+      unsubFranqueadora();
+      unsubSelectedCompany();
+      unsubEffectiveCompany();
     };
   });
 
   async function fetchCourses() {
     const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/listar-cursos';
     
-    if (!user?.companyId) {
+    const companyId = effectiveCompanyIdValue || userValue?.companyId;
+    if (!companyId) {
       return;
     }
     
     try {
       const payload = {
-        company_id: user.companyId
+        company_id: companyId
       };
 
       const response = await fetch(WEBHOOK_URL, {
@@ -155,7 +181,8 @@
   async function fetchLeads() {
     const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/leads-list';
     
-    if (!user?.companyId) {
+    const companyId = effectiveCompanyIdValue || userValue?.companyId;
+    if (!companyId) {
       console.error('Não é possível buscar leads sem companyId');
       return;
     }
@@ -163,8 +190,6 @@
     loading = true;
     
     try {
-      const companyId = user.companyId;
-      
       const payload = {
         companyId: companyId
       };
@@ -182,18 +207,14 @@
       courses = ['todos', ...Array.from(new Set(leads.map(l => l.course).filter(c => c)))];
       sellers = ['todos', ...Array.from(new Set(leads.map(l => l.seller).filter(s => s)))];
       
-      const uniqueDays = Array.from(new Set(leads
-        .map(l => {
-          if (!l.firstContact) return null;
-          const formatted = formatDate(l.firstContact);
-          // Validar se a data formatada é válida
-          if (!/^\d{2}\/\d{2}\/\d{4}$/.test(formatted)) {
-            return null;
-          }
-          return formatted;
-        })
-        .filter(d => d !== null) as string[]
-      ));
+      const uniqueDays = Array.from(new Set(leads.map(l => {
+        if (!l.firstContact) return null;
+        const formatted = formatDate(l.firstContact);
+        if (!/^\d{2}\/\d{2}\/\d{4}$/.test(formatted)) {
+          return null;
+        }
+        return formatted;
+      }).filter(d => d !== null) as string[]));
       
       dates = ['todos', ...uniqueDays.sort((a, b) => {
         const [dayA, monthA, yearA] = a.split('/').map(Number);
@@ -202,7 +223,6 @@
         const dateB = new Date(yearB, monthB - 1, dayB);
         return dateB.getTime() - dateA.getTime();
       })];
-      
       
       await new Promise(resolve => setTimeout(resolve, 500));
     } catch (error) {
@@ -242,14 +262,16 @@
     try {
       const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/leads-create';
       
+      const companyId = effectiveCompanyIdValue || userValue?.companyId;
+      
       const payload = {
-        companyId: user?.companyId,
+        companyId: companyId,
         name: newLead.name,
         email: newLead.email,
         phone: newLead.phone,
         category: newLead.category,
         course: newLead.course,
-        seller: newLead.seller || user?.name,
+        seller: newLead.seller || userValue?.name,
         notes: newLead.notes,
         firstContact: new Date().toISOString()
       };
@@ -262,7 +284,7 @@
 
       if (response.ok) {
         showNewLeadModal = false;
-        await fetchLeads(); // Recarrega a lista de leads
+        await fetchLeads();
       } else {
         alert('Erro ao salvar lead. Tente novamente.');
       }
@@ -311,13 +333,18 @@
       <div>
         <h1 class="text-3xl font-bold text-foreground mb-2">Leads</h1>
         <p class="text-muted-foreground">Gerencie todos os seus leads</p>
+        
+        {#if isFranqueadoraValue && selectedCompanyValue}
+          <p class="text-sm text-green-500 mt-2">
+            Visualizando dados de: <span class="font-semibold">{selectedCompanyValue.name}</span>
+          </p>
+        {/if}
       </div>
-      <!-- Adicionando botões de Novo Lead e Exportar -->
       <div class="flex gap-3">
         <button
-          aria-label="Criar novo lead"
           onclick={openNewLeadModal}
           class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
+          aria-label="Abrir modal para criar novo lead"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
@@ -325,9 +352,9 @@
           Novo Lead
         </button>
         <button
-          aria-label="Exportar leads"
           onclick={exportToCSV}
           class="flex items-center gap-2 px-4 py-2 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors"
+          aria-label="Exportar leads para CSV"
         >
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/>
@@ -337,131 +364,139 @@
       </div>
     </div>
 
-    <!-- Search and Filters -->
-    <!-- Card com borda verde sutil -->
-    <div class="bg-card border border-green-600/20 rounded-lg p-6 mb-6">
-      <div class="flex flex-col gap-4">
-        <div class="flex-1">
-          <label for="searchTerm" class="sr-only">Buscar por nome, email ou telefone...</label>
-          <!-- Input com foco verde -->
-          <input
-            id="searchTerm"
-            type="text"
-            bind:value={searchTerm}
-            placeholder="Buscar por nome, email ou telefone..."
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
-          />
+    {#if isFranqueadoraValue && !selectedCompanyValue}
+      <div class="flex items-center justify-center min-h-[400px]">
+        <div class="text-center max-w-md">
+          <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-yellow-600/10 flex items-center justify-center">
+            <svg class="w-10 h-10 text-yellow-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+            </svg>
+          </div>
+          <h2 class="text-2xl font-bold text-foreground mb-2">Selecione uma Unidade</h2>
+          <p class="text-muted-foreground">
+            Para visualizar os leads, selecione uma unidade no menu lateral.
+          </p>
         </div>
-
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label for="filterDate" class="block text-sm font-medium text-foreground mb-2">Data</label>
-            <select
-              id="filterDate"
-              bind:value={filterDate}
-              class="w-full px-4 py-2 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
-            >
-              {#each dates as date}
-                <option value={date}>{date === 'todos' ? 'Todas as datas' : date}</option>
-              {/each}
-            </select>
-          </div>
-          
-          <div>
-            <label for="filterCategory" class="block text-sm font-medium text-foreground mb-2">Categoria</label>
-            <select
-              id="filterCategory"
-              bind:value={filterCategory}
-              class="w-full px-4 py-2 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
-            >
-              {#each categories as category}
-                <option value={category}>{category === 'todos' ? 'Todas' : category}</option>
-              {/each}
-            </select>
-          </div>
-
-          <div>
-            <label for="filterCourse" class="block text-sm font-medium text-foreground mb-2">Curso</label>
-            <select
-              id="filterCourse"
-              bind:value={filterCourse}
-              class="w-full px-4 py-2 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
-            >
-              {#each courses as course}
-                <option value={course}>{course === 'todos' ? 'Todos' : course}</option>
-              {/each}
-            </select>
-          </div>
-
-          <div>
-            <label for="filterSeller" class="block text-sm font-medium text-foreground mb-2">Vendedor</label>
-            <select
-              id="filterSeller"
-              bind:value={filterSeller}
-              class="w-full px-4 py-2 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
-            >
-              {#each sellers as seller}
-                <option value={seller}>{seller === 'todos' ? 'Todos' : seller}</option>
-              {/each}
-            </select>
-          </div>
-        </div>
-
-        <div class="text-sm text-muted-foreground">
-          Mostrando {filteredLeads().length} de {leads.length} leads
-        </div>
-      </div>
-    </div>
-
-    <!-- Leads Table -->
-    {#if loading}
-      <div class="flex items-center justify-center py-12">
-        <!-- Spinner verde -->
-        <div class="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
       </div>
     {:else}
-      <div class="bg-card border border-green-600/20 rounded-lg overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full">
-            <thead>
-              <tr class="border-b border-border bg-muted/30">
-                <th class="text-left p-4 text-sm font-medium text-muted-foreground">ID</th>
-                <th class="text-left p-4 text-sm font-medium text-muted-foreground">Nome</th>
-                <th class="text-left p-4 text-sm font-medium text-muted-foreground">Categoria</th>
-                <th class="text-left p-4 text-sm font-medium text-muted-foreground">Curso</th>
-                <th class="text-left p-4 text-sm font-medium text-muted-foreground">Telefone</th>
-                <th class="text-left p-4 text-sm font-medium text-muted-foreground">Vendedor</th>
-                <th class="text-left p-4 text-sm font-medium text-muted-foreground">Primeiro Contato</th>
-                <th class="text-left p-4 text-sm font-medium text-muted-foreground">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each filteredLeads() as lead}
-                <!-- Borda verde no hover -->
-                <tr class="border-b border-border hover:bg-muted/20 hover:border-l-4 hover:border-l-green-600 transition-all">
-                  <td class="p-4 text-sm text-muted-foreground">#{lead.id}</td>
-                  <td class="p-4 text-sm text-foreground font-medium">{lead.name}</td>
-                  <td class="p-4 text-sm text-foreground">{lead.category}</td>
-                  <td class="p-4 text-sm text-foreground">{lead.course}</td>
-                  <td class="p-4 text-sm text-muted-foreground">{lead.phone}</td>
-                  <td class="p-4 text-sm text-muted-foreground">{lead.seller}</td>
-                  <td class="p-4 text-sm text-muted-foreground">{formatDate(lead.firstContact)}</td>
-                  <td class="p-4">
-                    <!-- Link verde -->
-                    <button
-                      aria-label={`Ver detalhes do lead ${lead.name}`}
-                      onclick={() => viewLeadDetails(lead)}
-                      class="text-green-500 hover:text-green-400 text-sm font-medium"
-                    >
-                      Ver detalhes
-                    </button>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+      <div class="bg-card border border-green-600/20 rounded-lg p-6 mb-6">
+        <div class="flex flex-col gap-4">
+          <div class="flex-1">
+            <input
+              type="text"
+              bind:value={searchTerm}
+              placeholder="Buscar por nome, email ou telefone..."
+              class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+              aria-label="Buscar por nome, email ou telefone"
+            />
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+            <div>
+              <label class="block text-sm font-medium text-white mb-2" for="filterDate">Data</label>
+              <select
+                bind:value={filterDate}
+                class="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+                id="filterDate"
+              >
+                {#each dates as date}
+                  <option value={date}>{date === 'todos' ? 'Todas as datas' : date}</option>
+                {/each}
+              </select>
+            </div>
+            
+            <div>
+              <label class="block text-sm font-medium text-white mb-2" for="filterCategory">Categoria</label>
+              <select
+                bind:value={filterCategory}
+                class="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+                id="filterCategory"
+              >
+                {#each categories as category}
+                  <option value={category}>{category === 'todos' ? 'Todas' : category}</option>
+                {/each}
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-white mb-2" for="filterCourse">Curso</label>
+              <select
+                bind:value={filterCourse}
+                class="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+                id="filterCourse"
+              >
+                {#each courses as course}
+                  <option value={course}>{course === 'todos' ? 'Todos' : course}</option>
+                {/each}
+              </select>
+            </div>
+
+            <div>
+              <label class="block text-sm font-medium text-white mb-2" for="filterSeller">Vendedor</label>
+              <select
+                bind:value={filterSeller}
+                class="w-full px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+                id="filterSeller"
+              >
+                {#each sellers as seller}
+                  <option value={seller}>{seller === 'todos' ? 'Todos' : seller}</option>
+                {/each}
+              </select>
+            </div>
+          </div>
+
+          <div class="text-sm text-zinc-400">
+            Mostrando {filteredLeads().length} de {leads.length} leads
+          </div>
         </div>
       </div>
+
+      {#if loading}
+        <div class="flex items-center justify-center py-12">
+          <div class="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+        </div>
+      {:else}
+        <div class="bg-zinc-900 border border-green-600/20 rounded-lg overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-zinc-700 bg-zinc-800/50">
+                  <th class="text-left p-4 text-sm font-medium text-zinc-400">ID</th>
+                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Nome</th>
+                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Categoria</th>
+                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Curso</th>
+                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Telefone</th>
+                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Vendedor</th>
+                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Primeiro Contato</th>
+                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each filteredLeads() as lead}
+                  <tr class="border-b border-zinc-700 hover:bg-zinc-800/50 hover:border-l-4 hover:border-l-green-600 transition-all">
+                    <td class="p-4 text-sm text-zinc-400">#{lead.id}</td>
+                    <td class="p-4 text-sm text-white font-medium">{lead.name}</td>
+                    <td class="p-4 text-sm text-white">{lead.category}</td>
+                    <td class="p-4 text-sm text-white">{lead.course}</td>
+                    <td class="p-4 text-sm text-zinc-400">{lead.phone}</td>
+                    <td class="p-4 text-sm text-zinc-400">{lead.seller}</td>
+                    <td class="p-4 text-sm text-zinc-400">{formatDate(lead.firstContact)}</td>
+                    <td class="p-4">
+                      <button
+                        onclick={() => viewLeadDetails(lead)}
+                        class="text-green-500 hover:text-green-400 text-sm font-medium"
+                        aria-label="Ver detalhes do lead"
+                      >
+                        Ver detalhes
+                      </button>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {/if}
     {/if}
   </main>
 </div>
@@ -469,14 +504,13 @@
 <!-- Detail Modal -->
 {#if showDetailModal && selectedLead}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <!-- Modal com fundo sólido bg-zinc-900 -->
     <div class="bg-zinc-900 border border-green-600/30 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-6">
         <h3 class="text-2xl font-bold text-white">Detalhes do Lead</h3>
         <button
-          aria-label="Fechar detalhes do lead"
           onclick={() => (showDetailModal = false)}
           class="text-zinc-400 hover:text-white"
+          aria-label="Fechar modal de detalhes"
         >
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -544,9 +578,9 @@
 
       <div class="flex gap-3 mt-6">
         <button
-          aria-label="Fechar"
           onclick={() => (showDetailModal = false)}
           class="flex-1 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors"
+          aria-label="Fechar modal de detalhes"
         >
           Fechar
         </button>
@@ -558,14 +592,13 @@
 <!-- Modal para criar novo lead -->
 {#if showNewLeadModal}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <!-- Modal com fundo sólido bg-zinc-900 -->
     <div class="bg-zinc-900 border border-green-600/30 rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-6">
         <h3 class="text-2xl font-bold text-white">Novo Lead</h3>
         <button
-          aria-label="Fechar modal"
           onclick={() => (showNewLeadModal = false)}
           class="text-zinc-400 hover:text-white"
+          aria-label="Fechar modal de novo lead"
         >
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -575,45 +608,45 @@
 
       <div class="space-y-4">
         <div>
-          <label for="newLeadName" class="block text-sm font-medium text-white mb-2">Nome Completo *</label>
+          <label class="block text-sm font-medium text-white mb-2" for="newLeadName">Nome Completo *</label>
           <input
-            id="newLeadName"
             type="text"
             bind:value={newLead.name}
             placeholder="Nome do lead"
             class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            id="newLeadName"
           />
         </div>
 
         <div>
-          <label for="newLeadEmail" class="block text-sm font-medium text-white mb-2">Email</label>
+          <label class="block text-sm font-medium text-white mb-2" for="newLeadEmail">Email</label>
           <input
-            id="newLeadEmail"
             type="email"
             bind:value={newLead.email}
             placeholder="email@exemplo.com"
             class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            id="newLeadEmail"
           />
         </div>
 
         <div>
-          <label for="newLeadPhone" class="block text-sm font-medium text-white mb-2">Telefone *</label>
+          <label class="block text-sm font-medium text-white mb-2" for="newLeadPhone">Telefone *</label>
           <input
-            id="newLeadPhone"
             type="tel"
             bind:value={newLead.phone}
             placeholder="(00) 00000-0000"
             class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            id="newLeadPhone"
           />
         </div>
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label for="newLeadCategory" class="block text-sm font-medium text-white mb-2">Categoria</label>
+            <label class="block text-sm font-medium text-white mb-2" for="newLeadCategory">Categoria</label>
             <select
-              id="newLeadCategory"
               bind:value={newLead.category}
               class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+              id="newLeadCategory"
             >
               <option value="">Selecione...</option>
               <option value="Técnico">Técnico</option>
@@ -623,11 +656,11 @@
           </div>
 
           <div>
-            <label for="newLeadCourse" class="block text-sm font-medium text-white mb-2">Curso</label>
+            <label class="block text-sm font-medium text-white mb-2" for="newLeadCourse">Curso</label>
             <select
-              id="newLeadCourse"
               bind:value={newLead.course}
               class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+              id="newLeadCourse"
             >
               <option value="">Selecione...</option>
               {#each registeredCourses as course}
@@ -638,41 +671,41 @@
         </div>
 
         <div>
-          <label for="newLeadSeller" class="block text-sm font-medium text-white mb-2">Vendedor</label>
+          <label class="block text-sm font-medium text-white mb-2" for="newLeadSeller">Vendedor</label>
           <input
-            id="newLeadSeller"
             type="text"
             bind:value={newLead.seller}
             placeholder="Nome do vendedor (opcional)"
             class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            id="newLeadSeller"
           />
         </div>
 
         <div>
-          <label for="newLeadNotes" class="block text-sm font-medium text-white mb-2">Observações</label>
+          <label class="block text-sm font-medium text-white mb-2" for="newLeadNotes">Observações</label>
           <textarea
-            id="newLeadNotes"
             bind:value={newLead.notes}
             placeholder="Observações sobre o lead..."
             rows="3"
             class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600 resize-none"
+            id="newLeadNotes"
           ></textarea>
         </div>
       </div>
 
       <div class="flex gap-3 mt-6">
         <button
-          aria-label="Cancelar"
           onclick={() => (showNewLeadModal = false)}
           class="flex-1 px-4 py-3 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 transition-colors"
+          aria-label="Cancelar criação de novo lead"
         >
           Cancelar
         </button>
         <button
-          aria-label="Salvar lead"
           onclick={saveNewLead}
           disabled={savingLead}
           class="flex-1 px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          aria-label="Salvar novo lead"
         >
           {#if savingLead}
             <div class="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>

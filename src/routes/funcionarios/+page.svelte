@@ -4,10 +4,13 @@
   import { authStore } from '$lib/stores/auth.svelte';
   import Sidebar from '$lib/components/layout/sidebar.svelte';
 
-  const auth = authStore;
-  let isAuthenticated = false;
-  let isManager = false;
-  let user = null;
+  const { user, isAuthenticated, isManager, isFranqueadora, effectiveCompanyId, selectedCompany } = authStore;
+  let isAuthenticatedValue = false;
+  let isManagerValue = false;
+  let isFranqueadoraValue = $state(false);
+  let userValue = null;
+  let effectiveCompanyIdValue = null;
+  let selectedCompanyValue = $state(null);
   let sidebarCollapsed = $state(false);
 
   interface Employee {
@@ -33,30 +36,45 @@
   });
   let error = $state('');
 
-  const roleLabels = {
+  const roleLabels: Record<string, string> = {
     funcionario: 'Funcionário',
     coordenador: 'Coordenador',
     direcao: 'Direção'
   };
 
   onMount(() => {
-    const unsubscribeAuth = authStore.isAuthenticated.subscribe(value => {
-      isAuthenticated = value;
+    const unsubscribeAuth = isAuthenticated.subscribe(value => {
+      isAuthenticatedValue = value;
       if (!value) {
         goto('/');
       }
     });
 
-    const unsubscribeManager = authStore.isManager.subscribe(value => {
-      isManager = value;
-      if (isAuthenticated && !value) {
+    const unsubscribeManager = isManager.subscribe(value => {
+      isManagerValue = value;
+      if (isAuthenticatedValue && !value) {
         goto('/dashboard');
       }
     });
 
-    const unsubscribeUser = authStore.user.subscribe(value => {
-      user = value;
-      if (value?.companyId && employees.length === 0 && !loading) {
+    const unsubscribeUser = user.subscribe(value => {
+      userValue = value;
+    });
+
+    const unsubscribeFranqueadora = isFranqueadora.subscribe(value => {
+      isFranqueadoraValue = value;
+    });
+
+    const unsubscribeEffectiveCompany = effectiveCompanyId.subscribe(value => {
+      effectiveCompanyIdValue = value;
+      if (value && employees.length === 0 && !loading) {
+        fetchEmployees();
+      }
+    });
+
+    const unsubscribeSelectedCompany = selectedCompany.subscribe(value => {
+      selectedCompanyValue = value;
+      if (isFranqueadoraValue && value) {
         fetchEmployees();
       }
     });
@@ -65,13 +83,17 @@
       unsubscribeAuth();
       unsubscribeManager();
       unsubscribeUser();
+      unsubscribeFranqueadora();
+      unsubscribeEffectiveCompany();
+      unsubscribeSelectedCompany();
     };
   });
 
   async function fetchEmployees() {
     const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/listar-funcionarios';
     
-    if (!user?.companyId) {
+    const companyId = effectiveCompanyIdValue || userValue?.companyId;
+    if (!companyId) {
       console.error('[v0] Não é possível buscar funcionários sem companyId');
       return;
     }
@@ -79,8 +101,6 @@
     loading = true;
     
     try {
-      const companyId = user.companyId;
-      
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -93,8 +113,8 @@
         const data = await response.json();
         employees = Array.isArray(data) ? data : [];
       }
-    } catch (error) {
-      console.error('[v0] Error fetching employees:', error);
+    } catch (err) {
+      console.error('[v0] Error fetching employees:', err);
     } finally {
       loading = false;
     }
@@ -132,7 +152,8 @@
       return;
     }
 
-    if (!user?.companyId) {
+    const companyId = effectiveCompanyIdValue || userValue?.companyId;
+    if (!companyId) {
       error = 'Erro: ID da empresa não encontrado';
       return;
     }
@@ -144,8 +165,6 @@
     loading = true;
     
     try {
-      const companyId = user.companyId;
-      
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -156,18 +175,12 @@
       });
       
       if (response.ok) {
-        if (isEditing) {
-          employees = employees.map(emp => 
-            emp.id === currentEmployee.id ? { ...currentEmployee } : emp
-          );
-        } else {
-          employees = [...employees, { ...currentEmployee, id: employees.length + 1 }];
-        }
+        await fetchEmployees();
         showModal = false;
       } else {
         error = 'Erro ao salvar funcionário';
       }
-    } catch (error) {
+    } catch (err) {
       error = 'Erro ao salvar funcionário';
     } finally {
       loading = false;
@@ -179,7 +192,8 @@
       return;
     }
 
-    if (!user?.companyId) {
+    const companyId = effectiveCompanyIdValue || userValue?.companyId;
+    if (!companyId) {
       console.error('[v0] Não é possível excluir funcionário sem companyId');
       return;
     }
@@ -189,8 +203,6 @@
     loading = true;
     
     try {
-      const companyId = user.companyId;
-      
       const response = await fetch(WEBHOOK_URL, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
@@ -203,27 +215,27 @@
       if (response.ok) {
         employees = employees.filter(emp => emp.id !== id);
       }
-    } catch (error) {
-      console.error('[v0] Error deleting employee:', error);
+    } catch (err) {
+      console.error('[v0] Error deleting employee:', err);
     } finally {
       loading = false;
     }
   }
 </script>
 
-<div class="flex min-h-screen bg-background">
-  <!-- Adicionando bind:collapsed para controlar expansão -->
+<div class="flex min-h-screen bg-zinc-950">
   <Sidebar currentPath="/funcionarios" bind:collapsed={sidebarCollapsed} />
   
-  <!-- Adicionando margin-left dinâmico -->
   <main class="flex-1 p-8 transition-all duration-300" style="margin-left: {sidebarCollapsed ? '5rem' : '16rem'}">
     <!-- Header -->
     <div class="flex items-center justify-between mb-8">
       <div>
-        <h1 class="text-3xl font-bold text-foreground mb-2">Funcionários</h1>
-        <p class="text-muted-foreground">Gerencie os acessos da equipe</p>
+        <h1 class="text-3xl font-bold text-white mb-2">Funcionários</h1>
+        <p class="text-zinc-400">Gerencie os acessos da equipe</p>
+        {#if isFranqueadoraValue && selectedCompanyValue}
+          <p class="text-sm text-green-500 mt-1">Visualizando: {selectedCompanyValue.name}</p>
+        {/if}
       </div>
-      <!-- Botão verde -->
       <button
         onclick={openCreateModal}
         class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -235,61 +247,65 @@
       </button>
     </div>
 
-    <!-- Employees Table -->
-    {#if loading && employees.length === 0}
-      <div class="flex items-center justify-center py-12">
-        <div class="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+    <!-- Aviso para franqueadora sem empresa selecionada -->
+    {#if isFranqueadoraValue && !selectedCompanyValue}
+      <div class="bg-yellow-900/30 border border-yellow-600/30 rounded-lg p-4 mb-6">
+        <p class="text-yellow-400">Selecione uma unidade no menu lateral para visualizar os funcionários.</p>
       </div>
     {:else}
-      <!-- Card com borda verde -->
-      <div class="bg-card border border-green-600/20 rounded-lg overflow-hidden">
-        <div class="overflow-x-auto">
-          <table class="w-full">
-            <thead>
-              <tr class="border-b border-border bg-muted/30">
-                <th class="text-left p-4 text-sm font-medium text-muted-foreground">Nome</th>
-                <th class="text-left p-4 text-sm font-medium text-muted-foreground">Email</th>
-                <th class="text-left p-4 text-sm font-medium text-muted-foreground">Telefone</th>
-                <th class="text-left p-4 text-sm font-medium text-muted-foreground">Cargo</th>
-                <th class="text-left p-4 text-sm font-medium text-muted-foreground">Ações</th>
-              </tr>
-            </thead>
-            <tbody>
-              {#each employees as employee}
-                <!-- Hover com borda verde -->
-                <tr class="border-b border-border hover:bg-muted/20 hover:border-l-4 hover:border-l-green-600 transition-all">
-                  <td class="p-4 text-sm text-foreground font-medium">{employee.name}</td>
-                  <td class="p-4 text-sm text-muted-foreground">{employee.email}</td>
-                  <td class="p-4 text-sm text-muted-foreground">{employee.phone}</td>
-                  <td class="p-4">
-                    <!-- Badge verde -->
-                    <span class="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-green-600/10 text-green-500">
-                      {roleLabels[employee.role]}
-                    </span>
-                  </td>
-                  <td class="p-4">
-                    <div class="flex items-center gap-2">
-                      <button
-                        onclick={() => openEditModal(employee)}
-                        class="text-green-500 hover:text-green-400 text-sm font-medium"
-                      >
-                        Editar
-                      </button>
-                      <span class="text-border">|</span>
-                      <button
-                        onclick={() => handleDelete(employee.id)}
-                        class="text-destructive hover:text-destructive/80 text-sm font-medium"
-                      >
-                        Excluir
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              {/each}
-            </tbody>
-          </table>
+      <!-- Employees Table -->
+      {#if loading && employees.length === 0}
+        <div class="flex items-center justify-center py-12">
+          <div class="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
         </div>
-      </div>
+      {:else}
+        <div class="bg-zinc-900 border border-green-600/20 rounded-lg overflow-hidden">
+          <div class="overflow-x-auto">
+            <table class="w-full">
+              <thead>
+                <tr class="border-b border-zinc-800 bg-zinc-800/30">
+                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Nome</th>
+                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Email</th>
+                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Telefone</th>
+                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Cargo</th>
+                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {#each employees as employee}
+                  <tr class="border-b border-zinc-800 hover:bg-zinc-800/20 hover:border-l-4 hover:border-l-green-600 transition-all">
+                    <td class="p-4 text-sm text-white font-medium">{employee.name}</td>
+                    <td class="p-4 text-sm text-zinc-400">{employee.email}</td>
+                    <td class="p-4 text-sm text-zinc-400">{employee.phone}</td>
+                    <td class="p-4">
+                      <span class="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-green-600/10 text-green-500">
+                        {roleLabels[employee.role] || employee.role}
+                      </span>
+                    </td>
+                    <td class="p-4">
+                      <div class="flex items-center gap-2">
+                        <button
+                          onclick={() => openEditModal(employee)}
+                          class="text-green-500 hover:text-green-400 text-sm font-medium"
+                        >
+                          Editar
+                        </button>
+                        <span class="text-zinc-600">|</span>
+                        <button
+                          onclick={() => handleDelete(employee.id)}
+                          class="text-red-500 hover:text-red-400 text-sm font-medium"
+                        >
+                          Excluir
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                {/each}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      {/if}
     {/if}
   </main>
 </div>
@@ -297,7 +313,6 @@
 <!-- Create/Edit Modal -->
 {#if showModal}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <!-- Modal com fundo sólido bg-zinc-900 -->
     <div class="bg-zinc-900 border border-green-600/30 rounded-lg p-6 w-full max-w-lg">
       <h3 class="text-2xl font-bold text-white mb-6">
         {isEditing ? 'Editar Funcionário' : 'Novo Funcionário'}
@@ -306,7 +321,6 @@
       <div class="space-y-4">
         <div>
           <label for="name" class="block text-sm font-medium text-white mb-2">Nome Completo *</label>
-          <!-- Inputs com foco verde -->
           <input
             id="name"
             type="text"
