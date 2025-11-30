@@ -351,23 +351,33 @@
                 {#each dashboardData.categories || [] as category, i}
                   {@const total = dashboardData.categories.reduce((sum, c) => sum + c.value, 0)}
                   {@const percentage = (category.value / total) * 100}
-                  {@const startAngle = dashboardData.categories.slice(0, i).reduce((sum, c) => sum + (c.value / total) * 360, 0)}
-                  {@const endAngle = startAngle + (percentage / 100) * 360}
-                  {@const largeArc = percentage > 50 ? 1 : 0}
+                  {#if percentage >= 99.9}
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      fill={category.color}
+                      opacity="0.9"
+                    />
+                  {:else}
+                    {@const startAngle = dashboardData.categories.slice(0, i).reduce((sum, c) => sum + (c.value / total) * 360, 0)}
+                    {@const endAngle = startAngle + (percentage / 100) * 360}
+                    {@const largeArc = percentage > 50 ? 1 : 0}
 
-                  {@const startRad = (startAngle - 90) * Math.PI / 180}
-                  {@const endRad = (endAngle - 90) * Math.PI / 180}
+                    {@const startRad = (startAngle - 90) * Math.PI / 180}
+                    {@const endRad = (endAngle - 90) * Math.PI / 180}
 
-                  {@const x1 = 50 + 40 * Math.cos(startRad)}
-                  {@const y1 = 50 + 40 * Math.sin(startRad)}
-                  {@const x2 = 50 + 40 * Math.cos(endRad)}
-                  {@const y2 = 50 + 40 * Math.sin(endRad)}
+                    {@const x1 = 50 + 40 * Math.cos(startRad)}
+                    {@const y1 = 50 + 40 * Math.sin(startRad)}
+                    {@const x2 = 50 + 40 * Math.cos(endRad)}
+                    {@const y2 = 50 + 40 * Math.sin(endRad)}
 
-                  <path
-                    d="M 50 50 L {x1} {y1} A 40 40 0 {largeArc} 1 {x2} {y2} Z"
-                    fill={category.color}
-                    opacity="0.9"
-                  />
+                    <path
+                      d="M 50 50 L {x1} {y1} A 40 40 0 {largeArc} 1 {x2} {y2} Z"
+                      fill={category.color}
+                      opacity="0.9"
+                    />
+                  {/if}
                 {/each}
               </svg>
             </div>

@@ -72,11 +72,12 @@
       </div>
       {#if !collapsed}
         <div class="flex-1 overflow-hidden">
-          <h1 class="font-bold text-white text-sm truncate">Virtualizze Track</h1>
+          <p class="text-xs text-zinc-400 truncate">Virtualizze Track</p>
+          <!-- <h1 class="font-bold text-white text-sm truncate">Virtualizze Track</h1> -->
           {#if $user}
-            <p class="text-xs text-zinc-400 truncate">
+            <h1 class="font-bold text-white text-sm truncate">
               {$user.companyName || 'Carregando...'}
-            </p>
+            </h1>
           {/if}
         </div>
       {/if}

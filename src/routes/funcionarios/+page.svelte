@@ -297,49 +297,49 @@
 <!-- Create/Edit Modal -->
 {#if showModal}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <!-- Modal com borda verde -->
-    <div class="bg-card border border-green-600/30 rounded-lg p-6 w-full max-w-lg">
-      <h3 class="text-2xl font-bold text-card-foreground mb-6">
+    <!-- Modal com fundo sólido bg-zinc-900 -->
+    <div class="bg-zinc-900 border border-green-600/30 rounded-lg p-6 w-full max-w-lg">
+      <h3 class="text-2xl font-bold text-white mb-6">
         {isEditing ? 'Editar Funcionário' : 'Novo Funcionário'}
       </h3>
 
       <div class="space-y-4">
         <div>
-          <label for="name" class="block text-sm font-medium text-foreground mb-2">Nome Completo *</label>
+          <label for="name" class="block text-sm font-medium text-white mb-2">Nome Completo *</label>
           <!-- Inputs com foco verde -->
           <input
             id="name"
             type="text"
             bind:value={currentEmployee.name}
             placeholder="João da Silva"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="email" class="block text-sm font-medium text-foreground mb-2">Email *</label>
+          <label for="email" class="block text-sm font-medium text-white mb-2">Email *</label>
           <input
             id="email"
             type="email"
             bind:value={currentEmployee.email}
             placeholder="joao@virtualizze.com"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="phone" class="block text-sm font-medium text-foreground mb-2">Telefone *</label>
+          <label for="phone" class="block text-sm font-medium text-white mb-2">Telefone *</label>
           <input
             id="phone"
             type="tel"
             bind:value={currentEmployee.phone}
             placeholder="(11) 99999-9999"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="password" class="block text-sm font-medium text-foreground mb-2">
+          <label for="password" class="block text-sm font-medium text-white mb-2">
             Senha {isEditing ? '(deixe vazio para manter)' : '*'}
           </label>
           <input
@@ -347,16 +347,16 @@
             type="password"
             bind:value={currentEmployee.password}
             placeholder="••••••••"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="role" class="block text-sm font-medium text-foreground mb-2">Cargo *</label>
+          <label for="role" class="block text-sm font-medium text-white mb-2">Cargo *</label>
           <select
             id="role"
             bind:value={currentEmployee.role}
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           >
             <option value="funcionario">Funcionário</option>
             <option value="coordenador">Coordenador</option>
@@ -365,8 +365,8 @@
         </div>
 
         {#if error}
-          <div class="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-            <p class="text-sm text-destructive">{error}</p>
+          <div class="bg-red-900/30 border border-red-600/20 rounded-lg p-3">
+            <p class="text-sm text-red-400">{error}</p>
           </div>
         {/if}
       </div>
@@ -375,11 +375,10 @@
         <button
           onclick={() => (showModal = false)}
           disabled={loading}
-          class="flex-1 px-4 py-3 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 disabled:opacity-50"
+          class="flex-1 px-4 py-3 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 disabled:opacity-50"
         >
           Cancelar
         </button>
-        <!-- Botão Salvar verde -->
         <button
           onclick={handleSubmit}
           disabled={loading}

@@ -29,39 +29,76 @@
     notes: ''
   });
 
-  let categories = $state(['todos']);
+  let categories = ['todos', 'Técnico', 'Profissionalizante', 'Superior', 'Indisponivel'];
   let courses = $state(['todos']);
+  let registeredCourses = $state([]); // Cursos cadastrados no sistema
   let sellers = $state(['todos']);
   let dates = $state(['todos']);
+
+  function normalizeText(text: string): string {
+    return text
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
 
   const filteredLeads = () => leads.filter(lead => {
     if (!isAuthenticated) {
       return [];
     }
+    const normalizedSearch = normalizeText(searchTerm);
     const matchesSearch = 
-      lead.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (lead.email?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+      normalizeText(lead.name || '').includes(normalizedSearch) ||
+      normalizeText(lead.email || '').includes(normalizedSearch) ||
       lead.phone?.includes(searchTerm);
     
-    const matchesCategory = filterCategory === 'todos' || lead.category === filterCategory;
-    const matchesCourse = filterCourse === 'todos' || lead.course === filterCourse;
-    const matchesSeller = filterSeller === 'todos' || lead.seller === filterSeller;
+    // Categoria "Indisponivel" filtra os que NÃO são Técnico, Profissionalizante ou Superior
+    let matchesCategory = filterCategory === 'todos';
+    if (!matchesCategory) {
+      if (filterCategory === 'Indisponivel') {
+        const validCategories = ['técnico', 'profissionalizante', 'superior'];
+        matchesCategory = !validCategories.includes(lead.category?.toLowerCase());
+      } else {
+        matchesCategory = lead.category?.toLowerCase() === filterCategory.toLowerCase();
+      }
+    }
+    
+    const matchesCourse = filterCourse === 'todos' || lead.course?.toLowerCase() === filterCourse.toLowerCase();
+    const matchesSeller = filterSeller === 'todos' || lead.seller?.toLowerCase() === filterSeller.toLowerCase();
     
     let matchesDate = filterDate === 'todos';
     if (!matchesDate && filterDate !== 'todos') {
-      try {
-        const date = new Date(lead.firstContact);
-        if (!isNaN(date.getTime())) {
-          const leadDay = date.toISOString().split('T')[0];
-          matchesDate = leadDay === filterDate;
-        }
-      } catch (error) {
-        matchesDate = false;
-      }
+      const leadDateFormatted = formatDate(lead.firstContact);
+      matchesDate = leadDateFormatted === filterDate;
     }
 
     return matchesSearch && matchesCategory && matchesCourse && matchesSeller && matchesDate;
   });
+
+  function formatDate(dateString: string): string {
+    if (!dateString) return '';
+    
+    try {
+      // Se já está no formato DD/MM/YYYY, retorna direto
+      if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateString)) {
+        return dateString;
+      }
+      
+      // Tentar parse ISO (YYYY-MM-DD ou YYYY-MM-DDTHH:mm:ss)
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) {
+        return dateString;
+      }
+      
+      const day = String(date.getUTCDate()).padStart(2, '0');
+      const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const year = date.getUTCFullYear();
+      return `${day}/${month}/${year}`;
+    } catch (error) {
+      console.error('[v0] Error formatting date:', error);
+      return dateString;
+    }
+  }
 
   onMount(() => {
     const unsubAuth = authStore.isAuthenticated.subscribe((value) => {
@@ -74,6 +111,7 @@
     const unsubUser = authStore.user.subscribe((value) => {
       user = value;
       if (value?.companyId && leads.length === 0 && !loading) {
+        fetchCourses(); // Buscar cursos cadastrados primeiro
         fetchLeads();
       }
     });
@@ -83,6 +121,36 @@
       unsubUser();
     };
   });
+
+  async function fetchCourses() {
+    const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/listar-cursos';
+    
+    if (!user?.companyId) {
+      return;
+    }
+    
+    try {
+      const payload = {
+        company_id: user.companyId
+      };
+
+      const response = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      registeredCourses = Array.isArray(data.courses) ? data.courses : [];
+    } catch (error) {
+      console.error('[v0] Error fetching courses:', error);
+      registeredCourses = [];
+    }
+  }
 
   async function fetchLeads() {
     const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/leads-list';
@@ -111,26 +179,30 @@
       
       leads = Array.isArray(data) ? data : [];
       
-      categories = ['todos', ...Array.from(new Set(leads.map(l => l.category)))];
-      courses = ['todos', ...Array.from(new Set(leads.map(l => l.course)))];
-      sellers = ['todos', ...Array.from(new Set(leads.map(l => l.seller)))];
+      courses = ['todos', ...Array.from(new Set(leads.map(l => l.course).filter(c => c)))];
+      sellers = ['todos', ...Array.from(new Set(leads.map(l => l.seller).filter(s => s)))];
       
       const uniqueDays = Array.from(new Set(leads
         .map(l => {
-          try {
-            const date = new Date(l.firstContact);
-            if (isNaN(date.getTime())) {
-              return null;
-            }
-            return date.toISOString().split('T')[0];
-          } catch (error) {
-            console.error('Invalid date format:', l.firstContact);
+          if (!l.firstContact) return null;
+          const formatted = formatDate(l.firstContact);
+          // Validar se a data formatada é válida
+          if (!/^\d{2}\/\d{2}\/\d{4}$/.test(formatted)) {
             return null;
           }
+          return formatted;
         })
         .filter(d => d !== null) as string[]
       ));
-      dates = ['todos', ...uniqueDays.sort((a, b) => b.localeCompare(a))];
+      
+      dates = ['todos', ...uniqueDays.sort((a, b) => {
+        const [dayA, monthA, yearA] = a.split('/').map(Number);
+        const [dayB, monthB, yearB] = b.split('/').map(Number);
+        const dateA = new Date(yearA, monthA - 1, dayA);
+        const dateB = new Date(yearB, monthB - 1, dayB);
+        return dateB.getTime() - dateA.getTime();
+      })];
+      
       
       await new Promise(resolve => setTimeout(resolve, 500));
     } catch (error) {
@@ -373,7 +445,7 @@
                   <td class="p-4 text-sm text-foreground">{lead.course}</td>
                   <td class="p-4 text-sm text-muted-foreground">{lead.phone}</td>
                   <td class="p-4 text-sm text-muted-foreground">{lead.seller}</td>
-                  <td class="p-4 text-sm text-muted-foreground">{lead.firstContact}</td>
+                  <td class="p-4 text-sm text-muted-foreground">{formatDate(lead.firstContact)}</td>
                   <td class="p-4">
                     <!-- Link verde -->
                     <button
@@ -397,14 +469,14 @@
 <!-- Detail Modal -->
 {#if showDetailModal && selectedLead}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <!-- Modal com borda verde -->
-    <div class="bg-card border border-green-600/30 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <!-- Modal com fundo sólido bg-zinc-900 -->
+    <div class="bg-zinc-900 border border-green-600/30 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-6">
-        <h3 class="text-2xl font-bold text-card-foreground">Detalhes do Lead</h3>
+        <h3 class="text-2xl font-bold text-white">Detalhes do Lead</h3>
         <button
           aria-label="Fechar detalhes do lead"
           onclick={() => (showDetailModal = false)}
-          class="text-muted-foreground hover:text-foreground"
+          class="text-zinc-400 hover:text-white"
         >
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -415,12 +487,11 @@
       <div class="space-y-4">
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <span class="text-sm font-medium text-muted-foreground block mb-1">ID</span>
-            <p class="text-foreground">#{selectedLead.id}</p>
+            <span class="text-sm font-medium text-zinc-400 block mb-1">ID</span>
+            <p class="text-white">#{selectedLead.id}</p>
           </div>
           <div>
-            <span class="text-sm font-medium text-muted-foreground block mb-1">Status</span>
-            <!-- Badge verde -->
+            <span class="text-sm font-medium text-zinc-400 block mb-1">Status</span>
             <span class="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-green-600/10 text-green-500">
               {selectedLead.status}
             </span>
@@ -428,46 +499,46 @@
         </div>
 
         <div>
-          <span class="text-sm font-medium text-muted-foreground block mb-1">Nome Completo</span>
-          <p class="text-foreground font-medium">{selectedLead.name}</p>
+          <span class="text-sm font-medium text-zinc-400 block mb-1">Nome Completo</span>
+          <p class="text-white font-medium">{selectedLead.name}</p>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <span class="text-sm font-medium text-muted-foreground block mb-1">Email</span>
-            <p class="text-foreground">{selectedLead.email}</p>
+            <span class="text-sm font-medium text-zinc-400 block mb-1">Email</span>
+            <p class="text-white">{selectedLead.email}</p>
           </div>
           <div>
-            <span class="text-sm font-medium text-muted-foreground block mb-1">Telefone</span>
-            <p class="text-foreground">{selectedLead.phone}</p>
-          </div>
-        </div>
-
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <span class="text-sm font-medium text-muted-foreground block mb-1">Categoria</span>
-            <p class="text-foreground">{selectedLead.category}</p>
-          </div>
-          <div>
-            <span class="text-sm font-medium text-muted-foreground block mb-1">Curso de Interesse</span>
-            <p class="text-foreground">{selectedLead.course}</p>
+            <span class="text-sm font-medium text-zinc-400 block mb-1">Telefone</span>
+            <p class="text-white">{selectedLead.phone}</p>
           </div>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <span class="text-sm font-medium text-muted-foreground block mb-1">Vendedor Responsável</span>
-            <p class="text-foreground">{selectedLead.seller}</p>
+            <span class="text-sm font-medium text-zinc-400 block mb-1">Categoria</span>
+            <p class="text-white">{selectedLead.category}</p>
           </div>
           <div>
-            <span class="text-sm font-medium text-muted-foreground block mb-1">Primeiro Contato</span>
-            <p class="text-foreground">{selectedLead.firstContact}</p>
+            <span class="text-sm font-medium text-zinc-400 block mb-1">Curso de Interesse</span>
+            <p class="text-white">{selectedLead.course}</p>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <span class="text-sm font-medium text-zinc-400 block mb-1">Vendedor Responsável</span>
+            <p class="text-white">{selectedLead.seller}</p>
+          </div>
+          <div>
+            <span class="text-sm font-medium text-zinc-400 block mb-1">Primeiro Contato</span>
+            <p class="text-white">{formatDate(selectedLead.firstContact)}</p>
           </div>
         </div>
 
         <div>
-          <span class="text-sm font-medium text-muted-foreground block mb-1">Observações</span>
-          <p class="text-foreground bg-muted/30 p-3 rounded-lg">{selectedLead.notes}</p>
+          <span class="text-sm font-medium text-zinc-400 block mb-1">Observações</span>
+          <p class="text-white bg-zinc-800 p-3 rounded-lg">{selectedLead.notes}</p>
         </div>
       </div>
 
@@ -475,7 +546,7 @@
         <button
           aria-label="Fechar"
           onclick={() => (showDetailModal = false)}
-          class="flex-1 px-4 py-2 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80"
+          class="flex-1 px-4 py-2 rounded-lg bg-green-600 hover:bg-green-700 text-white transition-colors"
         >
           Fechar
         </button>
@@ -487,13 +558,14 @@
 <!-- Modal para criar novo lead -->
 {#if showNewLeadModal}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <div class="bg-card border border-green-600/30 rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
+    <!-- Modal com fundo sólido bg-zinc-900 -->
+    <div class="bg-zinc-900 border border-green-600/30 rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
       <div class="flex items-center justify-between mb-6">
-        <h3 class="text-2xl font-bold text-card-foreground">Novo Lead</h3>
+        <h3 class="text-2xl font-bold text-white">Novo Lead</h3>
         <button
           aria-label="Fechar modal"
           onclick={() => (showNewLeadModal = false)}
-          class="text-muted-foreground hover:text-foreground"
+          class="text-zinc-400 hover:text-white"
         >
           <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
@@ -503,45 +575,45 @@
 
       <div class="space-y-4">
         <div>
-          <label for="newLeadName" class="block text-sm font-medium text-foreground mb-2">Nome Completo *</label>
+          <label for="newLeadName" class="block text-sm font-medium text-white mb-2">Nome Completo *</label>
           <input
             id="newLeadName"
             type="text"
             bind:value={newLead.name}
             placeholder="Nome do lead"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="newLeadEmail" class="block text-sm font-medium text-foreground mb-2">Email</label>
+          <label for="newLeadEmail" class="block text-sm font-medium text-white mb-2">Email</label>
           <input
             id="newLeadEmail"
             type="email"
             bind:value={newLead.email}
             placeholder="email@exemplo.com"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="newLeadPhone" class="block text-sm font-medium text-foreground mb-2">Telefone *</label>
+          <label for="newLeadPhone" class="block text-sm font-medium text-white mb-2">Telefone *</label>
           <input
             id="newLeadPhone"
             type="tel"
             bind:value={newLead.phone}
             placeholder="(00) 00000-0000"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label for="newLeadCategory" class="block text-sm font-medium text-foreground mb-2">Categoria</label>
+            <label for="newLeadCategory" class="block text-sm font-medium text-white mb-2">Categoria</label>
             <select
               id="newLeadCategory"
               bind:value={newLead.category}
-              class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+              class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
             >
               <option value="">Selecione...</option>
               <option value="Técnico">Técnico</option>
@@ -551,36 +623,39 @@
           </div>
 
           <div>
-            <label for="newLeadCourse" class="block text-sm font-medium text-foreground mb-2">Curso</label>
-            <input
+            <label for="newLeadCourse" class="block text-sm font-medium text-white mb-2">Curso</label>
+            <select
               id="newLeadCourse"
-              type="text"
               bind:value={newLead.course}
-              placeholder="Nome do curso"
-              class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
-            />
+              class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            >
+              <option value="">Selecione...</option>
+              {#each registeredCourses as course}
+                <option value={course.name}>{course.name}</option>
+              {/each}
+            </select>
           </div>
         </div>
 
         <div>
-          <label for="newLeadSeller" class="block text-sm font-medium text-foreground mb-2">Vendedor</label>
+          <label for="newLeadSeller" class="block text-sm font-medium text-white mb-2">Vendedor</label>
           <input
             id="newLeadSeller"
             type="text"
             bind:value={newLead.seller}
             placeholder="Nome do vendedor (opcional)"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="newLeadNotes" class="block text-sm font-medium text-foreground mb-2">Observações</label>
+          <label for="newLeadNotes" class="block text-sm font-medium text-white mb-2">Observações</label>
           <textarea
             id="newLeadNotes"
             bind:value={newLead.notes}
             placeholder="Observações sobre o lead..."
             rows="3"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600 resize-none"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600 resize-none"
           ></textarea>
         </div>
       </div>

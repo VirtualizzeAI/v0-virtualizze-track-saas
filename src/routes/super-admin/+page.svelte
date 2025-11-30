@@ -593,59 +593,58 @@
 <!-- Create Company Modal -->
 {#if showCreateCompanyModal}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <!-- Modal com borda verde -->
-    <div class="bg-card border border-green-600/30 rounded-lg p-6 w-full max-w-lg">
-      <h3 class="text-2xl font-bold text-card-foreground mb-6">Nova Empresa</h3>
+    <!-- Modal com fundo sólido bg-zinc-900 -->
+    <div class="bg-zinc-900 border border-green-600/30 rounded-lg p-6 w-full max-w-lg">
+      <h3 class="text-2xl font-bold text-white mb-6">Nova Empresa</h3>
 
       <div class="space-y-4">
         <div>
-          <label for="company-name" class="block text-sm font-medium text-foreground mb-2">Nome *</label>
-          <!-- Inputs com foco verde -->
+          <label for="company-name" class="block text-sm font-medium text-white mb-2">Nome *</label>
           <input
             id="company-name"
             type="text"
             bind:value={currentCompany.name}
             placeholder="Nome da empresa"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="company-cnpj" class="block text-sm font-medium text-foreground mb-2">CNPJ</label>
+          <label for="company-cnpj" class="block text-sm font-medium text-white mb-2">CNPJ</label>
           <input
             id="company-cnpj"
             type="text"
             bind:value={currentCompany.cnpj}
             placeholder="00.000.000/0000-00"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="company-address" class="block text-sm font-medium text-foreground mb-2">Endereço</label>
+          <label for="company-address" class="block text-sm font-medium text-white mb-2">Endereço</label>
           <input
             id="company-address"
             type="text"
             bind:value={currentCompany.address}
             placeholder="Endereço completo"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="company-phone" class="block text-sm font-medium text-foreground mb-2">Telefone</label>
+          <label for="company-phone" class="block text-sm font-medium text-white mb-2">Telefone</label>
           <input
             id="company-phone"
             type="tel"
             bind:value={currentCompany.phone}
             placeholder="(11) 99999-9999"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         {#if error}
-          <div class="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-            <p class="text-sm text-destructive">{error}</p>
+          <div class="bg-red-900/30 border border-red-600/20 rounded-lg p-3">
+            <p class="text-sm text-red-400">{error}</p>
           </div>
         {/if}
       </div>
@@ -654,11 +653,10 @@
         <button
           onclick={() => (showCreateCompanyModal = false)}
           disabled={loading}
-          class="flex-1 px-4 py-3 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 disabled:opacity-50"
+          class="flex-1 px-4 py-3 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 disabled:opacity-50"
         >
           Cancelar
         </button>
-        <!-- Botão Salvar verde -->
         <button
           onclick={handleCreateCompany}
           disabled={loading}
@@ -674,57 +672,58 @@
 <!-- Edit Company Modal -->
 {#if showEditCompanyModal}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <div class="bg-card border border-green-600/30 rounded-lg p-6 w-full max-w-lg">
-      <h3 class="text-2xl font-bold text-card-foreground mb-6">Editar Empresa</h3>
+    <!-- Modal com fundo sólido bg-zinc-900 -->
+    <div class="bg-zinc-900 border border-green-600/30 rounded-lg p-6 w-full max-w-lg">
+      <h3 class="text-2xl font-bold text-white mb-6">Editar Empresa</h3>
 
       <div class="space-y-4">
         <div>
-          <label for="edit-company-name" class="block text-sm font-medium text-foreground mb-2">Nome *</label>
+          <label for="edit-company-name" class="block text-sm font-medium text-white mb-2">Nome *</label>
           <input
             id="edit-company-name"
             type="text"
             bind:value={editingCompany.name}
             placeholder="Nome da empresa"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="edit-company-cnpj" class="block text-sm font-medium text-foreground mb-2">CNPJ</label>
+          <label for="edit-company-cnpj" class="block text-sm font-medium text-white mb-2">CNPJ</label>
           <input
             id="edit-company-cnpj"
             type="text"
             bind:value={editingCompany.cnpj}
             placeholder="00.000.000/0000-00"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="edit-company-address" class="block text-sm font-medium text-foreground mb-2">Endereço</label>
+          <label for="edit-company-address" class="block text-sm font-medium text-white mb-2">Endereço</label>
           <input
             id="edit-company-address"
             type="text"
             bind:value={editingCompany.address}
             placeholder="Endereço completo"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="edit-company-phone" class="block text-sm font-medium text-foreground mb-2">Telefone</label>
+          <label for="edit-company-phone" class="block text-sm font-medium text-white mb-2">Telefone</label>
           <input
             id="edit-company-phone"
             type="tel"
             bind:value={editingCompany.phone}
             placeholder="(11) 99999-9999"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         {#if error}
-          <div class="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-            <p class="text-sm text-destructive">{error}</p>
+          <div class="bg-red-900/30 border border-red-600/20 rounded-lg p-3">
+            <p class="text-sm text-red-400">{error}</p>
           </div>
         {/if}
       </div>
@@ -733,7 +732,7 @@
         <button
           onclick={() => (showEditCompanyModal = false)}
           disabled={loading}
-          class="flex-1 px-4 py-3 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 disabled:opacity-50"
+          class="flex-1 px-4 py-3 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 disabled:opacity-50"
         >
           Cancelar
         </button>
@@ -752,47 +751,48 @@
 <!-- User Modal -->
 {#if showUserModal}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <div class="bg-card border border-green-600/30 rounded-lg p-6 w-full max-w-lg">
-      <h3 class="text-2xl font-bold text-card-foreground mb-6">
+    <!-- Modal com fundo sólido bg-zinc-900 -->
+    <div class="bg-zinc-900 border border-green-600/30 rounded-lg p-6 w-full max-w-lg">
+      <h3 class="text-2xl font-bold text-white mb-6">
         {isEditingUser ? 'Editar Usuário' : 'Novo Usuário'}
       </h3>
 
       <div class="space-y-4">
         <div>
-          <label for="user-name" class="block text-sm font-medium text-foreground mb-2">Nome *</label>
+          <label for="user-name" class="block text-sm font-medium text-white mb-2">Nome *</label>
           <input
             id="user-name"
             type="text"
             bind:value={currentUser.name}
             placeholder="Nome completo"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="user-email" class="block text-sm font-medium text-foreground mb-2">Email *</label>
+          <label for="user-email" class="block text-sm font-medium text-white mb-2">Email *</label>
           <input
             id="user-email"
             type="email"
             bind:value={currentUser.email}
             placeholder="email@exemplo.com"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="user-phone" class="block text-sm font-medium text-foreground mb-2">Telefone *</label>
+          <label for="user-phone" class="block text-sm font-medium text-white mb-2">Telefone *</label>
           <input
             id="user-phone"
             type="tel"
             bind:value={currentUser.phone}
             placeholder="(11) 99999-9999"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="user-password" class="block text-sm font-medium text-foreground mb-2">
+          <label for="user-password" class="block text-sm font-medium text-white mb-2">
             Senha {isEditingUser ? '(deixe vazio para manter)' : '*'}
           </label>
           <input
@@ -800,16 +800,16 @@
             type="password"
             bind:value={currentUser.password}
             placeholder="••••••••"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="user-role" class="block text-sm font-medium text-foreground mb-2">Cargo *</label>
+          <label for="user-role" class="block text-sm font-medium text-white mb-2">Cargo *</label>
           <select
             id="user-role"
             bind:value={currentUser.role}
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           >
             <option value="funcionario">Funcionário</option>
             <option value="coordenador">Coordenador</option>
@@ -818,11 +818,11 @@
         </div>
 
         <div>
-          <label for="user-company" class="block text-sm font-medium text-foreground mb-2">Empresa *</label>
+          <label for="user-company" class="block text-sm font-medium text-white mb-2">Empresa *</label>
           <select
             id="user-company"
             bind:value={currentUser.companyId}
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           >
             <option value="">Selecione uma empresa</option>
             {#each companies as company}
@@ -832,8 +832,8 @@
         </div>
 
         {#if error}
-          <div class="bg-destructive/10 border border-destructive/20 rounded-lg p-3">
-            <p class="text-sm text-destructive">{error}</p>
+          <div class="bg-red-900/30 border border-red-600/20 rounded-lg p-3">
+            <p class="text-sm text-red-400">{error}</p>
           </div>
         {/if}
       </div>
@@ -842,7 +842,7 @@
         <button
           onclick={() => (showUserModal = false)}
           disabled={loading}
-          class="flex-1 px-4 py-3 bg-secondary text-secondary-foreground rounded-lg hover:bg-secondary/80 disabled:opacity-50"
+          class="flex-1 px-4 py-3 bg-zinc-700 text-white rounded-lg hover:bg-zinc-600 disabled:opacity-50"
         >
           Cancelar
         </button>

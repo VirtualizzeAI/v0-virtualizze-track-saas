@@ -1,69 +1,47 @@
 @import "tailwindcss";
 
 @theme {
-  /* Cores de fundo e texto base */
+  /* Cores base com fundo escuro e card com opacidade sólida */
   --color-background: 0 0% 9%;
   --color-foreground: 0 0% 98%;
   --color-card: 0 0% 12%;
   --color-card-foreground: 0 0% 98%;
-  --color-popover: 0 0% 14%;
+  --color-popover: 0 0% 12%;
   --color-popover-foreground: 0 0% 98%;
 
-  /* Verde primário vibrante mais brilhante para combinar com a imagem */
+  /* Verde primário vibrante */
   --color-primary: 142 76% 45%;
   --color-primary-foreground: 0 0% 100%;
 
-  --color-secondary: 0 0% 20%;
+  --color-secondary: 0 0% 22%;
   --color-secondary-foreground: 0 0% 98%;
-  --color-muted: 0 0% 15%;
-  --color-muted-foreground: 0 0% 60%;
+  --color-muted: 0 0% 20%;
+  --color-muted-foreground: 0 0% 65%;
 
-  /* Accent também usa o verde vibrante */
   --color-accent: 142 76% 45%;
   --color-accent-foreground: 0 0% 100%;
 
   --color-destructive: 0 84% 60%;
   --color-destructive-foreground: 0 0% 98%;
 
-  /* Bordas e inputs mais escuros para contraste */
   --color-border: 0 0% 25%;
-  --color-input: 0 0% 15%;
+  --color-input: 0 0% 16%;
   --color-ring: 142 76% 45%;
 
-  /* Cores dos gráficos - mantidas da versão atual */
-  --color-chart-1: 0 84% 60%;
+  /* Cores dos gráficos em HSL vibrantes */
+  --color-chart-1: 0 72% 51%;
   --color-chart-2: 142 76% 45%;
-  --color-chart-3: 217 91% 60%;
+  --color-chart-3: 221 83% 53%;
   --color-chart-4: 38 92% 50%;
-  --color-chart-5: 280 80% 60%;
-
-  /* Sidebar com verde vibrante para item ativo */
-  --color-sidebar-background: 0 0% 7%;
-  --color-sidebar-foreground: 0 0% 70%;
-  --color-sidebar-primary: 142 76% 45%;
-  --color-sidebar-primary-foreground: 0 0% 100%;
-  --color-sidebar-accent: 142 76% 45%;
-  --color-sidebar-accent-foreground: 0 0% 100%;
-  --color-sidebar-border: 142 76% 45%;
-  --color-sidebar-ring: 142 76% 45%;
+  --color-chart-5: 271 81% 56%;
 
   --radius: 0.5rem;
-}
-
-/* Aplicando cores globais */
-* {
-  border-color: hsl(var(--color-border));
 }
 
 body {
   background-color: hsl(var(--color-background));
   color: hsl(var(--color-foreground));
   font-feature-settings: "rlig" 1, "calt" 1;
-}
-
-/* Garantindo fundo sólido dos modais */
-.bg-card {
-  background-color: hsl(var(--color-card)) !important;
 }
 
 /* Estilizando selects para ter opções visíveis */
