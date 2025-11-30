@@ -1,59 +1,67 @@
 @import "tailwindcss";
 
+/* Usando cores OKLCH que funcionam com Tailwind v4 */
 @theme {
-  /* Cores base com fundo escuro e card com opacidade sólida */
-  --color-background: 0 0% 9%;
-  --color-foreground: 0 0% 98%;
-  --color-card: 0 0% 12%;
-  --color-card-foreground: 0 0% 98%;
-  --color-popover: 0 0% 12%;
-  --color-popover-foreground: 0 0% 98%;
+  --color-background: oklch(0.145 0 0);
+  --color-foreground: oklch(0.985 0 0);
+  --color-card: oklch(0.205 0 0);
+  --color-card-foreground: oklch(0.985 0 0);
+  --color-popover: oklch(0.205 0 0);
+  --color-popover-foreground: oklch(0.985 0 0);
 
-  /* Verde primário vibrante */
-  --color-primary: 142 76% 45%;
-  --color-primary-foreground: 0 0% 100%;
+  --color-primary: oklch(0.696 0.17 142);
+  --color-primary-foreground: oklch(1 0 0);
 
-  --color-secondary: 0 0% 22%;
-  --color-secondary-foreground: 0 0% 98%;
-  --color-muted: 0 0% 20%;
-  --color-muted-foreground: 0 0% 65%;
+  --color-secondary: oklch(0.269 0 0);
+  --color-secondary-foreground: oklch(0.985 0 0);
+  --color-muted: oklch(0.269 0 0);
+  --color-muted-foreground: oklch(0.708 0 0);
 
-  --color-accent: 142 76% 45%;
-  --color-accent-foreground: 0 0% 100%;
+  --color-accent: oklch(0.696 0.17 142);
+  --color-accent-foreground: oklch(1 0 0);
 
-  --color-destructive: 0 84% 60%;
-  --color-destructive-foreground: 0 0% 98%;
+  --color-destructive: oklch(0.577 0.245 27.325);
+  --color-destructive-foreground: oklch(0.985 0 0);
 
-  --color-border: 0 0% 25%;
-  --color-input: 0 0% 16%;
-  --color-ring: 142 76% 45%;
+  --color-border: oklch(0.35 0 0);
+  --color-input: oklch(0.25 0 0);
+  --color-ring: oklch(0.696 0.17 142);
 
-  /* Cores dos gráficos em HSL vibrantes */
-  --color-chart-1: 0 72% 51%;
-  --color-chart-2: 142 76% 45%;
-  --color-chart-3: 221 83% 53%;
-  --color-chart-4: 38 92% 50%;
-  --color-chart-5: 271 81% 56%;
+  --color-chart-1: oklch(0.577 0.245 27.325);
+  --color-chart-2: oklch(0.696 0.17 142);
+  --color-chart-3: oklch(0.546 0.245 262);
+  --color-chart-4: oklch(0.769 0.188 70);
+  --color-chart-5: oklch(0.627 0.265 303);
 
   --radius: 0.5rem;
 }
 
 body {
-  background-color: hsl(var(--color-background));
-  color: hsl(var(--color-foreground));
+  background-color: var(--color-background);
+  color: var(--color-foreground);
   font-feature-settings: "rlig" 1, "calt" 1;
 }
 
-/* Estilizando selects para ter opções visíveis */
+/* Garantindo que selects tenham fundo escuro */
 select option {
-  background-color: hsl(var(--color-input));
-  color: hsl(var(--color-foreground));
+  background-color: #1a1a1a;
+  color: #fafafa;
   padding: 8px;
 }
 
 select option:hover,
 select option:focus,
 select option:checked {
-  background-color: hsl(var(--color-primary));
-  color: hsl(var(--color-primary-foreground));
+  background-color: #22c55e;
+  color: white;
+}
+
+/* Garantindo modais com fundo sólido */
+.modal-overlay {
+  background-color: rgba(0, 0, 0, 0.8);
+}
+
+.modal-content {
+  background-color: #18181b;
+  border: 1px solid #27272a;
 }

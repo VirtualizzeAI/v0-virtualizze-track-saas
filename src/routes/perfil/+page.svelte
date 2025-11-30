@@ -163,7 +163,7 @@
   }
 </script>
 
-<div class="flex min-h-screen bg-background">
+<div class="flex min-h-screen bg-zinc-950">
   <!-- Adicionando bind:collapsed -->
   <Sidebar currentPath="/perfil" bind:collapsed={sidebarCollapsed} />
   
@@ -171,13 +171,13 @@
   <main class="flex-1 p-8 max-w-4xl transition-all duration-300" style="margin-left: {sidebarCollapsed ? '5rem' : '16rem'}">
     <!-- Header -->
     <div class="mb-8">
-      <h1 class="text-3xl font-bold text-foreground mb-2">Perfil</h1>
-      <p class="text-muted-foreground">Gerencie suas informações pessoais</p>
+      <h1 class="text-3xl font-bold text-white mb-2">Perfil</h1>
+      <p class="text-zinc-400">Gerencie suas informações pessoais</p>
     </div>
 
     {#if error}
-      <div class="bg-destructive/10 border border-destructive/20 rounded-lg p-4 mb-6">
-        <p class="text-sm text-destructive">{error}</p>
+      <div class="bg-red-500/10 border border-red-500/20 rounded-lg p-4 mb-6">
+        <p class="text-sm text-red-500">{error}</p>
       </div>
     {/if}
 
@@ -188,50 +188,50 @@
     {/if}
 
     <!-- User Info (Read-only) -->
-    <div class="bg-card border border-green-600/20 rounded-lg p-6 mb-6">
-      <h2 class="text-xl font-semibold text-card-foreground mb-4">Informações da Conta</h2>
+    <div class="bg-zinc-900 border border-green-600/20 rounded-lg p-6 mb-6">
+      <h2 class="text-xl font-semibold text-white mb-4">Informações da Conta</h2>
       <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label for="name" class="block text-sm font-medium text-muted-foreground mb-1">Nome</label>
-          <p class="text-foreground font-medium" id="name">{user?.name || 'Carregando...'}</p>
+          <label for="name" class="block text-sm font-medium text-zinc-400 mb-1">Nome</label>
+          <p class="text-white font-medium" id="name">{user?.name || 'Carregando...'}</p>
         </div>
         <div>
-          <label for="role" class="block text-sm font-medium text-muted-foreground mb-1">Setor</label>
+          <label for="role" class="block text-sm font-medium text-zinc-400 mb-1">Setor</label>
           <span class="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-green-600/10 text-green-500" id="role">
             {roleLabels[user?.role || 'funcionario']}
           </span>
         </div>
         {#if user?.companyName}
           <div class="md:col-span-2">
-            <label for="companyName" class="block text-sm font-medium text-muted-foreground mb-1">Empresa</label>
-            <p class="text-foreground" id="companyName">{user.companyName}</p>
+            <label for="companyName" class="block text-sm font-medium text-zinc-400 mb-1">Empresa</label>
+            <p class="text-white" id="companyName">{user.companyName}</p>
           </div>
         {/if}
       </div>
     </div>
 
     <!-- Update Profile -->
-    <div class="bg-card border border-green-600/20 rounded-lg p-6 mb-6">
-      <h2 class="text-xl font-semibold text-card-foreground mb-4">Atualizar Dados</h2>
+    <div class="bg-zinc-900 border border-green-600/20 rounded-lg p-6 mb-6">
+      <h2 class="text-xl font-semibold text-white mb-4">Atualizar Dados</h2>
       <div class="space-y-4">
         <div>
-          <label for="email" class="block text-sm font-medium text-foreground mb-2">Email</label>
+          <label for="email" class="block text-sm font-medium text-white mb-2">Email</label>
           <input
             id="email"
             type="email"
             bind:value={formData.email}
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="phone" class="block text-sm font-medium text-foreground mb-2">Telefone</label>
+          <label for="phone" class="block text-sm font-medium text-white mb-2">Telefone</label>
           <input
             id="phone"
             type="tel"
             bind:value={formData.phone}
             placeholder="(11) 99999-9999"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
@@ -246,39 +246,39 @@
     </div>
 
     <!-- Change Password -->
-    <div class="bg-card border border-green-600/20 rounded-lg p-6">
-      <h2 class="text-xl font-semibold text-card-foreground mb-4">Alterar Senha</h2>
+    <div class="bg-zinc-900 border border-green-600/20 rounded-lg p-6">
+      <h2 class="text-xl font-semibold text-white mb-4">Alterar Senha</h2>
       <div class="space-y-4">
         <div>
-          <label for="currentPassword" class="block text-sm font-medium text-foreground mb-2">Senha Atual</label>
+          <label for="currentPassword" class="block text-sm font-medium text-white mb-2">Senha Atual</label>
           <input
             id="currentPassword"
             type="password"
             bind:value={formData.currentPassword}
             placeholder="••••••••"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="newPassword" class="block text-sm font-medium text-foreground mb-2">Nova Senha</label>
+          <label for="newPassword" class="block text-sm font-medium text-white mb-2">Nova Senha</label>
           <input
             id="newPassword"
             type="password"
             bind:value={formData.newPassword}
             placeholder="••••••••"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 
         <div>
-          <label for="confirmPassword" class="block text-sm font-medium text-foreground mb-2">Confirmar Nova Senha</label>
+          <label for="confirmPassword" class="block text-sm font-medium text-white mb-2">Confirmar Nova Senha</label>
           <input
             id="confirmPassword"
             type="password"
             bind:value={formData.confirmPassword}
             placeholder="••••••••"
-            class="w-full px-4 py-3 bg-input border border-border rounded-lg text-foreground focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
           />
         </div>
 

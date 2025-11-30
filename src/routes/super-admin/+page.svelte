@@ -58,7 +58,7 @@
     loading = true;
     try {
       const response = await fetch('https://auto.agiussolar.cloud/webhook/listar-empresas', {
-        method: 'GET',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
 
@@ -379,7 +379,7 @@
   }
 </script>
 
-<div class="min-h-screen bg-background">
+<div class="min-h-screen bg-zinc-950">
   <!-- Header -->
   <!-- Header com borda verde -->
   <header class="bg-card border-b border-green-600/30">

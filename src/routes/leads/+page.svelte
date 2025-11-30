@@ -324,15 +324,15 @@
   }
 </script>
 
-<div class="flex min-h-screen bg-background">
+<div class="flex min-h-screen bg-zinc-950">
   <Sidebar currentPath="/leads" bind:collapsed={sidebarCollapsed} />
   
   <main class="flex-1 p-8 transition-all duration-300" style="margin-left: {sidebarCollapsed ? '5rem' : '16rem'}">
     <!-- Header -->
     <div class="flex items-center justify-between mb-8">
       <div>
-        <h1 class="text-3xl font-bold text-foreground mb-2">Leads</h1>
-        <p class="text-muted-foreground">Gerencie todos os seus leads</p>
+        <h1 class="text-3xl font-bold text-white mb-2">Leads</h1>
+        <p class="text-zinc-400">Gerencie todos os seus leads</p>
         
         {#if isFranqueadoraValue && selectedCompanyValue}
           <p class="text-sm text-green-500 mt-2">
@@ -372,14 +372,14 @@
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
             </svg>
           </div>
-          <h2 class="text-2xl font-bold text-foreground mb-2">Selecione uma Unidade</h2>
-          <p class="text-muted-foreground">
+          <h2 class="text-2xl font-bold text-white mb-2">Selecione uma Unidade</h2>
+          <p class="text-zinc-400">
             Para visualizar os leads, selecione uma unidade no menu lateral.
           </p>
         </div>
       </div>
     {:else}
-      <div class="bg-card border border-green-600/20 rounded-lg p-6 mb-6">
+      <div class="bg-zinc-900 border border-green-600/20 rounded-lg p-6 mb-6">
         <div class="flex flex-col gap-4">
           <div class="flex-1">
             <input
@@ -462,13 +462,13 @@
               <thead>
                 <tr class="border-b border-zinc-700 bg-zinc-800/50">
                   <th class="text-left p-4 text-sm font-medium text-zinc-400">ID</th>
-                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Nome</th>
-                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Categoria</th>
-                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Curso</th>
+                  <th class="text-left p-4 text-sm font-medium text-white">Nome</th>
+                  <th class="text-left p-4 text-sm font-medium text-white">Categoria</th>
+                  <th class="text-left p-4 text-sm font-medium text-white">Curso</th>
                   <th class="text-left p-4 text-sm font-medium text-zinc-400">Telefone</th>
                   <th class="text-left p-4 text-sm font-medium text-zinc-400">Vendedor</th>
                   <th class="text-left p-4 text-sm font-medium text-zinc-400">Primeiro Contato</th>
-                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Ações</th>
+                  <th class="text-left p-4 text-sm font-medium text-white">Ações</th>
                 </tr>
               </thead>
               <tbody>
