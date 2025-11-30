@@ -1,6 +1,6 @@
 import { writable, derived } from "svelte/store"
 
-type UserRole = "funcionario" | "coordenador" | "direcao" | "super_admin"
+type UserRole = "funcionario" | "coordenador" | "direcao" | "super_admin" | "franqueadora"
 
 interface User {
   id: string
@@ -12,8 +12,15 @@ interface User {
   companyName?: string
 }
 
+interface Company {
+  id: number
+  name: string
+}
+
 function createAuthStore() {
   const user = writable<User | null>(null)
+  const selectedCompany = writable<Company | null>(null)
+  const companies = writable<Company[]>([])
 
   // Restaurar sessão do localStorage ao inicializar
   if (typeof window !== "undefined") {
@@ -31,14 +38,35 @@ function createAuthStore() {
         localStorage.removeItem("user")
       }
     }
+
+    const storedCompany = localStorage.getItem("selectedCompany")
+    if (storedCompany) {
+      try {
+        selectedCompany.set(JSON.parse(storedCompany))
+      } catch (error) {
+        localStorage.removeItem("selectedCompany")
+      }
+    }
   }
 
   const isAuthenticated = derived(user, ($user) => $user !== null)
   const isSuperAdmin = derived(user, ($user) => $user?.role === "super_admin")
+  const isFranqueadora = derived(user, ($user) => $user?.role === "franqueadora")
   const isManager = derived(
     user,
-    ($user) => $user?.role === "coordenador" || $user?.role === "direcao" || $user?.role === "super_admin",
+    ($user) =>
+      $user?.role === "coordenador" ||
+      $user?.role === "direcao" ||
+      $user?.role === "super_admin" ||
+      $user?.role === "franqueadora",
   )
+
+  const effectiveCompanyId = derived([user, selectedCompany], ([$user, $selectedCompany]) => {
+    if ($user?.role === "franqueadora" && $selectedCompany) {
+      return $selectedCompany.id
+    }
+    return $user?.companyId || null
+  })
 
   async function login(email: string, password: string): Promise<{ success: boolean; error?: string }> {
     const WEBHOOK_URL = "https://auto.agiussolar.cloud/webhook/login"
@@ -55,7 +83,7 @@ function createAuthStore() {
         const rawCompanyId = data.user.company_id || data.user.companyId
         const companyId = Number.parseInt(String(rawCompanyId), 10)
 
-        if (isNaN(companyId) && data.user.role != "super_admin") {
+        if (isNaN(companyId) && data.user.role !== "super_admin" && data.user.role !== "franqueadora") {
           console.error("[v0] companyId inválido na resposta do login:", rawCompanyId)
           return { success: false, error: "Dados de empresa inválidos" }
         }
@@ -73,8 +101,6 @@ function createAuthStore() {
         localStorage.setItem("user", JSON.stringify(userData))
         user.set(userData)
 
-        const verificacao = localStorage.getItem("user")
-
         return { success: true }
       }
 
@@ -86,26 +112,58 @@ function createAuthStore() {
   }
 
   async function resetPassword(email: string): Promise<{ success: boolean; error?: string }> {
-    // <WEBHOOK> Coloque aqui a URL do webhook N8N para reset de senha
-    const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/reset-password';
+    const WEBHOOK_URL = "https://auto.agiussolar.cloud/webhook/reset-password"
 
     try {
       const response = await fetch(WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email })
-      });
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      })
 
-      // Simulação - sempre retorna sucesso
       return { success: true }
     } catch (error) {
       return { success: false, error: "Erro ao enviar email de recuperação" }
     }
   }
 
+  async function fetchCompanies(): Promise<void> {
+    // <WEBHOOK> URL do webhook para listar empresas
+    const WEBHOOK_URL = "https://auto.agiussolar.cloud/webhook/listar-empresas"
+
+    try {
+      const response = await fetch(WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      })
+      const data = await response.json()
+
+      if (Array.isArray(data)) {
+        companies.set(data)
+      } else if (data.companies && Array.isArray(data.companies)) {
+        companies.set(data.companies)
+      }
+    } catch (error) {
+      console.error("[v0] Erro ao buscar empresas:", error)
+    }
+  }
+
+  function selectCompany(company: Company | null) {
+    selectedCompany.set(company)
+    if (company) {
+      localStorage.setItem("selectedCompany", JSON.stringify(company))
+    } else {
+      localStorage.removeItem("selectedCompany")
+    }
+  }
+
   function logout() {
     user.set(null)
+    selectedCompany.set(null)
+    companies.set([])
     localStorage.removeItem("user")
+    localStorage.removeItem("selectedCompany")
   }
 
   function updateUser(userData: Partial<User>) {
@@ -123,11 +181,17 @@ function createAuthStore() {
     user,
     isAuthenticated,
     isSuperAdmin,
+    isFranqueadora,
     isManager,
+    selectedCompany,
+    companies,
+    effectiveCompanyId,
     login,
     resetPassword,
     logout,
     updateUser,
+    fetchCompanies,
+    selectCompany,
   }
 }
 

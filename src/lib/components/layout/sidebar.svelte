@@ -3,7 +3,7 @@
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.svelte';
 
-  const { user, isAuthenticated, isSuperAdmin, isManager, login, logout, updateUser } = authStore;
+  const { user, isAuthenticated, isSuperAdmin, isFranqueadora, isManager, login, logout, updateUser } = authStore;
 
   let { currentPath, collapsed = false } = $props();
 
@@ -21,7 +21,7 @@
       }
     ];
 
-    if ($user && $user.role !== 'funcionario') {
+    if ($user && ($user.role !== 'funcionario')) {
       items.push({
         name: 'Cursos e Turmas',
         path: '/cursos',
@@ -29,7 +29,7 @@
       });
     }
 
-    if ($user && $user.role !== 'funcionario') {
+    if ($user && ($user.role !== 'funcionario')) {
       items.push({
         name: 'Funcionários',
         path: '/funcionarios',
@@ -73,7 +73,6 @@
       {#if !collapsed}
         <div class="flex-1 overflow-hidden">
           <p class="text-xs text-zinc-400 truncate">Virtualizze Track</p>
-          <!-- <h1 class="font-bold text-white text-sm truncate">Virtualizze Track</h1> -->
           {#if $user}
             <h1 class="font-bold text-white text-sm truncate">
               {$user.companyName || 'Carregando...'}

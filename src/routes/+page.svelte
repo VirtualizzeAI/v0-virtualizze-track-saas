@@ -4,7 +4,7 @@
   import { authStore } from '$lib/stores/auth.svelte'
   import { get } from 'svelte/store'
 
-  const { user, isAuthenticated, isSuperAdmin, login, resetPassword } = authStore
+  const { user, isAuthenticated, isSuperAdmin, isFranqueadora, login, resetPassword } = authStore
 
   onMount(() => {
     if (get(isAuthenticated)) {
