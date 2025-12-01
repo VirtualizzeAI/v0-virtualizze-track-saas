@@ -1,39 +1,10 @@
-@import "tailwindcss";
+/* Usando CSS puro com variáveis CSS customizadas */
 
-/* Usando cores OKLCH que funcionam com Tailwind v4 */
-@theme {
-  --color-background: oklch(0.145 0 0);
-  --color-foreground: oklch(0.985 0 0);
-  --color-card: oklch(0.205 0 0);
-  --color-card-foreground: oklch(0.985 0 0);
-  --color-popover: oklch(0.205 0 0);
-  --color-popover-foreground: oklch(0.985 0 0);
-
-  --color-primary: oklch(0.696 0.17 142);
-  --color-primary-foreground: oklch(1 0 0);
-
-  --color-secondary: oklch(0.269 0 0);
-  --color-secondary-foreground: oklch(0.985 0 0);
-  --color-muted: oklch(0.269 0 0);
-  --color-muted-foreground: oklch(0.708 0 0);
-
-  --color-accent: oklch(0.696 0.17 142);
-  --color-accent-foreground: oklch(1 0 0);
-
-  --color-destructive: oklch(0.577 0.245 27.325);
-  --color-destructive-foreground: oklch(0.985 0 0);
-
-  --color-border: oklch(0.35 0 0);
-  --color-input: oklch(0.25 0 0);
-  --color-ring: oklch(0.696 0.17 142);
-
-  --color-chart-1: oklch(0.577 0.245 27.325);
-  --color-chart-2: oklch(0.696 0.17 142);
-  --color-chart-3: oklch(0.546 0.245 262);
-  --color-chart-4: oklch(0.769 0.188 70);
-  --color-chart-5: oklch(0.627 0.265 303);
-
-  --radius: 0.5rem;
+:root {
+  --color-primary: #22c55e;
+  --color-primary-dark: #16a34a;
+  --color-background: #09090b;
+  --color-foreground: #fafafa;
 }
 
 body {

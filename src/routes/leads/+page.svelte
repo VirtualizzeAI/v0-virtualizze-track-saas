@@ -138,6 +138,10 @@
       }
     });
 
+    if (isAuthenticated) {
+      fetchLeads();
+    }
+
     return () => {
       unsubAuth();
       unsubUser();
@@ -181,18 +185,24 @@
   async function fetchLeads() {
     const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/leads-list';
     
-    const companyId = effectiveCompanyIdValue || userValue?.companyId;
+    // Se effectiveCompanyIdValue for null, buscar todos os leads
+    // Caso contrário, usar effectiveCompanyIdValue ou companyId do usuário
+    const companyId = effectiveCompanyIdValue ?? userValue?.companyId;
+    
     if (!companyId) {
-      console.error('Não é possível buscar leads sem companyId');
-      return;
+      console.log('[v0] Buscando todos os leads (franqueadora sem empresa selecionada)');
+    } else {
+      console.log('[v0] Buscando leads da empresa:', companyId);
     }
     
     loading = true;
     
     try {
-      const payload = {
-        companyId: companyId
-      };
+      const payload = companyId 
+        ? { companyId: companyId }
+        : { allCompanies: true };
+
+      console.log('[v0] Payload para leads:', payload);
 
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
@@ -200,7 +210,14 @@
         body: JSON.stringify(payload)
       });
 
+      if (!response.ok) {
+        console.error('[v0] Erro na resposta:', response.status);
+        leads = [];
+        return;
+      }
+
       const data = await response.json();
+      console.log('[v0] Leads recebidos:', data?.length || 0);
       
       leads = Array.isArray(data) ? data : [];
       
@@ -225,8 +242,8 @@
       })];
       
       await new Promise(resolve => setTimeout(resolve, 500));
-    } catch (error) {
-      console.error('[v0] Error fetching leads:', error);
+    } catch (err) {
+      console.error('[v0] Erro ao buscar leads:', err);
       leads = [];
     } finally {
       loading = false;

@@ -3,13 +3,14 @@
   import { goto } from '$app/navigation';
   import { authStore } from '$lib/stores/auth.svelte';
   import Sidebar from '$lib/components/layout/sidebar.svelte';
+  
 
   const { user, isAuthenticated, isManager, isFranqueadora, effectiveCompanyId, selectedCompany } = authStore;
   let isAuthenticatedValue = false;
   let isManagerValue = false;
   let isFranqueadoraValue = $state(false);
   let userValue = null;
-  let effectiveCompanyIdValue = null;
+  let effectiveCompanyIdValue = $state(null);
   let selectedCompanyValue = $state(null);
   let sidebarCollapsed = $state(false);
 
@@ -20,9 +21,11 @@
     password?: string;
     phone: string;
     role: 'funcionario' | 'coordenador' | 'direcao';
+    company_name?: string;
   }
 
   let employees: Employee[] = $state([]);
+  let searchTerm = $state('');
   let loading = $state(false);
   let showModal = $state(false);
   let isEditing = $state(false);
@@ -41,6 +44,53 @@
     coordenador: 'Coordenador',
     direcao: 'Direção'
   };
+
+  function normalizeText(text: string): string {
+    return text
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '')
+      .toLowerCase();
+  }
+
+  let filteredEmployees = $derived.by(() => {
+    let filtered = employees;
+    
+    // Aplicar filtro de busca
+    if (searchTerm.trim()) {
+      const normalized = normalizeText(searchTerm);
+      filtered = employees.filter(emp => {
+        const nameMatch = normalizeText(emp.name).includes(normalized);
+        const emailMatch = normalizeText(emp.email).includes(normalized);
+        const phoneMatch = emp.phone.includes(searchTerm);
+        const roleMatch = normalizeText(roleLabels[emp.role] || emp.role).includes(normalized);
+        
+        return nameMatch || emailMatch || phoneMatch || roleMatch;
+      });
+    }
+    
+    return filtered;
+  });
+
+  let employeesByCompany = $derived.by(() => {
+    if (!isFranqueadoraValue || effectiveCompanyIdValue !== null) {
+      // Se não é franqueadora ou tem empresa específica selecionada, não agrupar
+      return { 'default': filteredEmployees };
+    }
+    
+    // Agrupar por empresa
+    const grouped: Record<string, Employee[]> = {};
+    filteredEmployees.forEach(emp => {
+      const companyName = emp.company_name || 'Sem empresa';
+      if (!grouped[companyName]) {
+        grouped[companyName] = [];
+      }
+      grouped[companyName].push(emp);
+    });
+    
+    return grouped;
+  });
+
+  let showGrouped = $derived(isFranqueadoraValue && effectiveCompanyIdValue === null);
 
   onMount(() => {
     const unsubscribeAuth = isAuthenticated.subscribe(value => {
@@ -65,56 +115,72 @@
       isFranqueadoraValue = value;
     });
 
-    const unsubscribeEffectiveCompany = effectiveCompanyId.subscribe(value => {
+    const unsubscribeSelectedCompany = selectedCompany.subscribe(value => {
+      selectedCompanyValue = value;
+    });
+
+    const unsubscribeEffectiveCompanyId = effectiveCompanyId.subscribe(value => {
+      const previousValue = effectiveCompanyIdValue;
       effectiveCompanyIdValue = value;
-      if (value && employees.length === 0 && !loading) {
+      
+      // Buscar sempre que mudar a empresa (incluindo na primeira vez)
+      if (previousValue !== value) {
+        console.log('[v0] Empresa mudou, buscando funcionários para:', value);
         fetchEmployees();
       }
     });
 
-    const unsubscribeSelectedCompany = selectedCompany.subscribe(value => {
-      selectedCompanyValue = value;
-      if (isFranqueadoraValue && value) {
-        fetchEmployees();
-      }
-    });
+    fetchEmployees();
 
     return () => {
       unsubscribeAuth();
       unsubscribeManager();
       unsubscribeUser();
       unsubscribeFranqueadora();
-      unsubscribeEffectiveCompany();
       unsubscribeSelectedCompany();
+      unsubscribeEffectiveCompanyId();
     };
   });
 
   async function fetchEmployees() {
     const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/listar-funcionarios';
     
-    const companyId = effectiveCompanyIdValue || userValue?.companyId;
-    if (!companyId) {
-      console.error('[v0] Não é possível buscar funcionários sem companyId');
-      return;
-    }
+    const companyId = effectiveCompanyIdValue ?? userValue?.companyId;
     
     loading = true;
     
     try {
+      const payload = companyId 
+        ? { companyId: companyId }
+        : { allCompanies: true };
+      
+      console.log('[v0] Buscando funcionários com payload:', payload);
+      
       const response = await fetch(WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          companyId: companyId
-        })
+        body: JSON.stringify(payload)
       });
       
-      if (response.ok) {
-        const data = await response.json();
-        employees = Array.isArray(data) ? data : [];
+      if (!response.ok) {
+        console.error('[v0] Erro na resposta funcionários:', response.status);
+        employees = [];
+        return;
       }
+
+      const text = await response.text();
+      if (!text || text.trim() === '') {
+        console.log('[v0] Resposta vazia do webhook');
+        employees = [];
+        return;
+      }
+
+      const data = JSON.parse(text);
+      employees = Array.isArray(data) ? data : [];
+      console.log('[v0] Funcionários recebidos:', employees.length);
     } catch (err) {
       console.error('[v0] Error fetching employees:', err);
+      employees = [];
     } finally {
       loading = false;
     }
@@ -214,12 +280,17 @@
       
       if (response.ok) {
         employees = employees.filter(emp => emp.id !== id);
+        updateFilteredEmployees();
       }
     } catch (err) {
       console.error('[v0] Error deleting employee:', err);
     } finally {
       loading = false;
     }
+  }
+
+  function updateFilteredEmployees() {
+    // This function is now handled by $derived
   }
 </script>
 
@@ -234,6 +305,8 @@
         <p class="text-zinc-400">Gerencie os acessos da equipe</p>
         {#if isFranqueadoraValue && selectedCompanyValue}
           <p class="text-sm text-green-500 mt-1">Visualizando: {selectedCompanyValue.name}</p>
+        {:else if isFranqueadoraValue && effectiveCompanyIdValue === null}
+          <p class="text-sm text-green-500 mt-1">Visualizando: Todas as Empresas</p>
         {/if}
       </div>
       <button
@@ -247,65 +320,149 @@
       </button>
     </div>
 
-    <!-- Aviso para franqueadora sem empresa selecionada -->
-    {#if isFranqueadoraValue && !selectedCompanyValue}
-      <div class="bg-yellow-900/30 border border-yellow-600/30 rounded-lg p-4 mb-6">
-        <p class="text-yellow-400">Selecione uma unidade no menu lateral para visualizar os funcionários.</p>
+    <!-- Campo de busca -->
+    <div class="mb-6">
+      <div class="relative">
+        <svg class="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+        </svg>
+        <input
+          type="text"
+          bind:value={searchTerm}
+          placeholder="Buscar por nome, email, telefone ou cargo..."
+          class="w-full pl-10 pr-4 py-3 bg-zinc-900 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+        />
+      </div>
+    </div>
+
+    <!-- Employees Table -->
+    {#if loading && employees.length === 0}
+      <div class="flex items-center justify-center py-12">
+        <div class="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
+      </div>
+    {:else if showGrouped}
+      <!-- Exibir agrupado por empresa -->
+      <div class="space-y-6">
+        {#each Object.entries(employeesByCompany) as [companyName, companyEmployees]}
+          <div class="bg-zinc-900 border border-green-600/20 rounded-lg overflow-hidden">
+            <div class="bg-zinc-800/50 px-6 py-3 border-b border-zinc-700">
+              <h3 class="text-lg font-semibold text-green-500">{companyName}</h3>
+            </div>
+            <div class="overflow-x-auto">
+              <table class="w-full">
+                <thead>
+                  <tr class="border-b border-zinc-800 bg-zinc-800/30">
+                    <th class="text-left p-4 text-sm font-medium text-zinc-400">Nome</th>
+                    <th class="text-left p-4 text-sm font-medium text-zinc-400">Email</th>
+                    <th class="text-left p-4 text-sm font-medium text-zinc-400">Telefone</th>
+                    <th class="text-left p-4 text-sm font-medium text-zinc-400">Cargo</th>
+                    <th class="text-left p-4 text-sm font-medium text-zinc-400">Ações</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {#each companyEmployees as employee}
+                    <tr class="border-b border-zinc-800 hover:bg-zinc-800/20 hover:border-l-4 hover:border-l-green-600 transition-all">
+                      <td class="p-4 text-sm text-white font-medium">{employee.name}</td>
+                      <td class="p-4 text-sm text-zinc-400">{employee.email}</td>
+                      <td class="p-4 text-sm text-zinc-400">{employee.phone}</td>
+                      <td class="p-4">
+                        <span class="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-green-600/10 text-green-500">
+                          {roleLabels[employee.role] || employee.role}
+                        </span>
+                      </td>
+                      <td class="p-4">
+                        <div class="flex items-center gap-2">
+                          <button
+                            onclick={() => openEditModal(employee)}
+                            class="text-green-500 hover:text-green-400 text-sm font-medium"
+                          >
+                            Editar
+                          </button>
+                          <span class="text-zinc-600">|</span>
+                          <button
+                            onclick={() => handleDelete(employee.id)}
+                            class="text-red-500 hover:text-red-400 text-sm font-medium"
+                          >
+                            Excluir
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  {:else}
+                    <tr>
+                      <td colspan="5" class="p-8 text-center text-zinc-400">
+                        Nenhum funcionário nesta empresa.
+                      </td>
+                    </tr>
+                  {/each}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        {/each}
+        
+        {#if Object.keys(employeesByCompany).length === 0}
+          <div class="bg-zinc-900 border border-green-600/20 rounded-lg p-8 text-center">
+            <p class="text-zinc-400">
+              {searchTerm ? 'Nenhum funcionário encontrado com os critérios de busca.' : 'Nenhum funcionário cadastrado.'}
+            </p>
+          </div>
+        {/if}
       </div>
     {:else}
-      <!-- Employees Table -->
-      {#if loading && employees.length === 0}
-        <div class="flex items-center justify-center py-12">
-          <div class="w-8 h-8 border-4 border-green-600 border-t-transparent rounded-full animate-spin"></div>
-        </div>
-      {:else}
-        <div class="bg-zinc-900 border border-green-600/20 rounded-lg overflow-hidden">
-          <div class="overflow-x-auto">
-            <table class="w-full">
-              <thead>
-                <tr class="border-b border-zinc-800 bg-zinc-800/30">
-                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Nome</th>
-                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Email</th>
-                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Telefone</th>
-                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Cargo</th>
-                  <th class="text-left p-4 text-sm font-medium text-zinc-400">Ações</th>
+      <!-- Exibir lista simples quando empresa específica está selecionada -->
+      <div class="bg-zinc-900 border border-green-600/20 rounded-lg overflow-hidden">
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead>
+              <tr class="border-b border-zinc-800 bg-zinc-800/30">
+                <th class="text-left p-4 text-sm font-medium text-zinc-400">Nome</th>
+                <th class="text-left p-4 text-sm font-medium text-zinc-400">Email</th>
+                <th class="text-left p-4 text-sm font-medium text-zinc-400">Telefone</th>
+                <th class="text-left p-4 text-sm font-medium text-zinc-400">Cargo</th>
+                <th class="text-left p-4 text-sm font-medium text-zinc-400">Ações</th>
+              </tr>
+            </thead>
+            <tbody>
+              {#each filteredEmployees as employee}
+                <tr class="border-b border-zinc-800 hover:bg-zinc-800/20 hover:border-l-4 hover:border-l-green-600 transition-all">
+                  <td class="p-4 text-sm text-white font-medium">{employee.name}</td>
+                  <td class="p-4 text-sm text-zinc-400">{employee.email}</td>
+                  <td class="p-4 text-sm text-zinc-400">{employee.phone}</td>
+                  <td class="p-4">
+                    <span class="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-green-600/10 text-green-500">
+                      {roleLabels[employee.role] || employee.role}
+                    </span>
+                  </td>
+                  <td class="p-4">
+                    <div class="flex items-center gap-2">
+                      <button
+                        onclick={() => openEditModal(employee)}
+                        class="text-green-500 hover:text-green-400 text-sm font-medium"
+                      >
+                        Editar
+                      </button>
+                      <span class="text-zinc-600">|</span>
+                      <button
+                        onclick={() => handleDelete(employee.id)}
+                        class="text-red-500 hover:text-red-400 text-sm font-medium"
+                      >
+                        Excluir
+                      </button>
+                    </div>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {#each employees as employee}
-                  <tr class="border-b border-zinc-800 hover:bg-zinc-800/20 hover:border-l-4 hover:border-l-green-600 transition-all">
-                    <td class="p-4 text-sm text-white font-medium">{employee.name}</td>
-                    <td class="p-4 text-sm text-zinc-400">{employee.email}</td>
-                    <td class="p-4 text-sm text-zinc-400">{employee.phone}</td>
-                    <td class="p-4">
-                      <span class="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-green-600/10 text-green-500">
-                        {roleLabels[employee.role] || employee.role}
-                      </span>
-                    </td>
-                    <td class="p-4">
-                      <div class="flex items-center gap-2">
-                        <button
-                          onclick={() => openEditModal(employee)}
-                          class="text-green-500 hover:text-green-400 text-sm font-medium"
-                        >
-                          Editar
-                        </button>
-                        <span class="text-zinc-600">|</span>
-                        <button
-                          onclick={() => handleDelete(employee.id)}
-                          class="text-red-500 hover:text-red-400 text-sm font-medium"
-                        >
-                          Excluir
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
-          </div>
+              {:else}
+                <tr>
+                  <td colspan="5" class="p-8 text-center text-zinc-400">
+                    {searchTerm ? 'Nenhum funcionário encontrado com os critérios de busca.' : 'Nenhum funcionário cadastrado.'}
+                  </td>
+                </tr>
+              {/each}
+            </tbody>
+          </table>
         </div>
-      {/if}
+      </div>
     {/if}
   </main>
 </div>
