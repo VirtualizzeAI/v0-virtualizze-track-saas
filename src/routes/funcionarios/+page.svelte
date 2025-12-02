@@ -81,6 +81,7 @@
 
   return grouped;
 });
+
   let showGrouped = $derived(isFranqueadoraValue && effectiveCompanyIdValue === null);
 
   onMount(() => {
