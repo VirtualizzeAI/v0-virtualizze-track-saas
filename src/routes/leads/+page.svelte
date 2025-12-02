@@ -381,7 +381,7 @@
       </div>
     </div>
 
-    {#if isFranqueadoraValue && !selectedCompanyValue}
+    {#if isFranqueadoraValue && !selectedCompanyValue && leads.length === 0 && !loading}
       <div class="flex items-center justify-center min-h-[400px]">
         <div class="text-center max-w-md">
           <div class="w-20 h-20 mx-auto mb-6 rounded-full bg-yellow-600/10 flex items-center justify-center">
