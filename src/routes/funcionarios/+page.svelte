@@ -184,7 +184,7 @@
     
     try {
       const response = await fetch(WEBHOOK_URL, {
-        method: 'GET',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' }
       });
       
@@ -202,7 +202,7 @@
       }
 
       const data = JSON.parse(text);
-      companiesValue = Array.isArray(data) ? data : [];
+      companiesValue = Array.isArray(data.companies) ? data.companies : [];
       console.log('[v0] Empresas recebidas:', companiesValue.length);
     } catch (err) {
       console.error('[v0] Error fetching companies:', err);
