@@ -22,6 +22,7 @@
     phone: string;
     role: 'funcionario' | 'coordenador' | 'direcao';
     company_name?: string;
+    company_id?: number;
   }
 
   let employees: Employee[] = $state([]);
@@ -35,9 +36,11 @@
     email: '',
     password: '',
     phone: '',
-    role: 'funcionario'
+    role: 'funcionario',
+    company_id: undefined
   });
   let error = $state('');
+  let companiesValue: { id: number, name: string }[] = $state([]);
 
   const roleLabels: Record<string, string> = {
     funcionario: 'Funcionário',
@@ -52,44 +55,32 @@
       .toLowerCase();
   }
 
-  let filteredEmployees = $derived.by(() => {
-    let filtered = employees;
-    
-    // Aplicar filtro de busca
+  let filteredEmployees = $derived.by(() => employees.filter(emp => {
     if (searchTerm.trim()) {
       const normalized = normalizeText(searchTerm);
-      filtered = employees.filter(emp => {
-        const nameMatch = normalizeText(emp.name).includes(normalized);
-        const emailMatch = normalizeText(emp.email).includes(normalized);
-        const phoneMatch = emp.phone.includes(searchTerm);
-        const roleMatch = normalizeText(roleLabels[emp.role] || emp.role).includes(normalized);
-        
-        return nameMatch || emailMatch || phoneMatch || roleMatch;
-      });
+      return (
+        normalizeText(emp.name).includes(normalized) ||
+        normalizeText(emp.email).includes(normalized) ||
+        emp.phone.includes(searchTerm) ||
+        normalizeText(roleLabels[emp.role] || emp.role).includes(normalized)
+      );
     }
-    
-    return filtered;
-  });
+    return true;
+  }))
 
   let employeesByCompany = $derived.by(() => {
-    if (!isFranqueadoraValue || effectiveCompanyIdValue !== null) {
-      // Se não é franqueadora ou tem empresa específica selecionada, não agrupar
-      return { 'default': filteredEmployees };
-    }
-    
-    // Agrupar por empresa
-    const grouped: Record<string, Employee[]> = {};
-    filteredEmployees.forEach(emp => {
-      const companyName = emp.company_name || 'Sem empresa';
-      if (!grouped[companyName]) {
-        grouped[companyName] = [];
-      }
-      grouped[companyName].push(emp);
-    });
-    
-    return grouped;
-  });
+  if (!employees || employees.length === 0) return {};
 
+  const grouped: Record<string, Employee[]> = {};
+
+  for (const emp of employees) {
+    const companyName = emp.company_name || 'Sem empresa';
+    if (!grouped[companyName]) grouped[companyName] = [];
+    grouped[companyName].push(emp);
+  }
+
+  return grouped;
+});
   let showGrouped = $derived(isFranqueadoraValue && effectiveCompanyIdValue === null);
 
   onMount(() => {
@@ -122,8 +113,6 @@
     const unsubscribeEffectiveCompanyId = effectiveCompanyId.subscribe(value => {
       const previousValue = effectiveCompanyIdValue;
       effectiveCompanyIdValue = value;
-      
-      // Buscar sempre que mudar a empresa (incluindo na primeira vez)
       if (previousValue !== value) {
         console.log('[v0] Empresa mudou, buscando funcionários para:', value);
         fetchEmployees();
@@ -131,6 +120,7 @@
     });
 
     fetchEmployees();
+    fetchCompanies();
 
     return () => {
       unsubscribeAuth();
@@ -161,6 +151,8 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
+
+      console.log(`resposta api: ${response}`)
       
       if (!response.ok) {
         console.error('[v0] Erro na resposta funcionários:', response.status);
@@ -177,12 +169,44 @@
 
       const data = JSON.parse(text);
       employees = Array.isArray(data) ? data : [];
+      console.log(`resposta api tratada: ${employees}`)
       console.log('[v0] Funcionários recebidos:', employees.length);
     } catch (err) {
       console.error('[v0] Error fetching employees:', err);
       employees = [];
     } finally {
       loading = false;
+    }
+  }
+
+  async function fetchCompanies() {
+    const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/listar-empresas';
+    
+    try {
+      const response = await fetch(WEBHOOK_URL, {
+        method: 'GET',
+        headers: { 'Content-Type': 'application/json' }
+      });
+      
+      if (!response.ok) {
+        console.error('[v0] Erro na resposta de empresas:', response.status);
+        companiesValue = [];
+        return;
+      }
+
+      const text = await response.text();
+      if (!text || text.trim() === '') {
+        console.log('[v0] Resposta vazia do webhook de empresas');
+        companiesValue = [];
+        return;
+      }
+
+      const data = JSON.parse(text);
+      companiesValue = Array.isArray(data) ? data : [];
+      console.log('[v0] Empresas recebidas:', companiesValue.length);
+    } catch (err) {
+      console.error('[v0] Error fetching companies:', err);
+      companiesValue = [];
     }
   }
 
@@ -194,7 +218,8 @@
       email: '',
       password: '',
       phone: '',
-      role: 'funcionario'
+      role: 'funcionario',
+      company_id: effectiveCompanyIdValue || undefined
     };
     error = '';
     showModal = true;
@@ -208,36 +233,41 @@
   }
 
   async function handleSubmit() {
-    if (!currentEmployee.name || !currentEmployee.email || !currentEmployee.phone) {
-      error = 'Preencha todos os campos obrigatórios';
+    if (
+      !currentEmployee.name ||
+      !currentEmployee.email ||
+      !currentEmployee.phone ||
+      (!isEditing && !currentEmployee.password)
+    ) {
+      error = 'Por favor, preencha todos os campos obrigatórios.';
       return;
     }
 
-    if (!isEditing && !currentEmployee.password) {
-      error = 'Senha é obrigatória para novos funcionários';
+    if (isFranqueadoraValue && !currentEmployee.company_id) {
+      error = 'Por favor, selecione uma empresa.';
       return;
     }
 
-    const companyId = effectiveCompanyIdValue || userValue?.companyId;
-    if (!companyId) {
-      error = 'Erro: ID da empresa não encontrado';
-      return;
-    }
-
-    const WEBHOOK_URL = isEditing 
-      ? 'https://auto.agiussolar.cloud/webhook/editar-funcionario'
-      : 'https://auto.agiussolar.cloud/webhook/criar-funcionario';
-    
     loading = true;
-    
+    error = '';
+
     try {
-      const response = await fetch(WEBHOOK_URL, {
-        method: 'POST',
+      const webhookUrl = isEditing
+        ? 'https://n8n-production-8686.up.railway.app/webhook/update-employee'
+        : 'https://n8n-production-8686.up.railway.app/webhook/create-employee';
+
+      const payload: any = {
+        name: currentEmployee.name,
+        email: currentEmployee.email,
+        phone: currentEmployee.phone,
+        role: currentEmployee.role,
+        company_id: isFranqueadoraValue ? currentEmployee.company_id : effectiveCompanyIdValue
+      };
+
+      const response = await fetch(webhookUrl, {
+        method: isEditing ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...currentEmployee,
-          companyId: companyId
-        })
+        body: JSON.stringify(payload)
       });
       
       if (response.ok) {
@@ -280,17 +310,12 @@
       
       if (response.ok) {
         employees = employees.filter(emp => emp.id !== id);
-        updateFilteredEmployees();
       }
     } catch (err) {
       console.error('[v0] Error deleting employee:', err);
     } finally {
       loading = false;
     }
-  }
-
-  function updateFilteredEmployees() {
-    // This function is now handled by $derived
   }
 </script>
 
@@ -470,12 +495,28 @@
 <!-- Create/Edit Modal -->
 {#if showModal}
   <div class="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-    <div class="bg-zinc-900 border border-green-600/30 rounded-lg p-6 w-full max-w-lg">
+    <div class="bg-zinc-900 border border-green-600/30 rounded-lg p-6 w-full max-w-lg max-h-[90vh] overflow-y-auto">
       <h3 class="text-2xl font-bold text-white mb-6">
         {isEditing ? 'Editar Funcionário' : 'Novo Funcionário'}
       </h3>
 
       <div class="space-y-4">
+        {#if isFranqueadoraValue && !isEditing}
+          <div>
+            <label for="company" class="block text-sm font-medium text-white mb-2">Empresa *</label>
+            <select
+              id="company"
+              bind:value={currentEmployee.company_id}
+              class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
+            >
+              <option value={undefined}>Selecione uma empresa</option>
+              {#each companiesValue as company}
+                <option value={company.id}>{company.name}</option>
+              {/each}
+            </select>
+          </div>
+        {/if}
+
         <div>
           <label for="name" class="block text-sm font-medium text-white mb-2">Nome Completo *</label>
           <input
