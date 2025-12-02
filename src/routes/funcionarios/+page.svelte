@@ -151,8 +151,6 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-
-      console.log(`resposta api: ${response}`)
       
       if (!response.ok) {
         console.error('[v0] Erro na resposta funcionários:', response.status);
@@ -169,7 +167,6 @@
 
       const data = JSON.parse(text);
       employees = Array.isArray(data) ? data : [];
-      console.log(`resposta api tratada: ${employees}`)
       console.log('[v0] Funcionários recebidos:', employees.length);
     } catch (err) {
       console.error('[v0] Error fetching employees:', err);
