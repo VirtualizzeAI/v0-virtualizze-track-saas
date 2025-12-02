@@ -115,6 +115,7 @@
     
     const unsubUser = auth.user.subscribe((value) => {
       userValue = value;
+      canDelete = value?.role === 'franqueadora' || value?.role === 'direcao';
       if (value?.companyId && leads.length === 0 && !loading) {
         fetchCourses();
         fetchLeads();
@@ -313,6 +314,75 @@
     }
   }
 
+  let selectedLeads = $state(new Set());
+  let canDelete = $state(false);
+  let deleting = $state(false);
+
+  function toggleSelectAll() {
+    const currentFiltered = filteredLeads();
+    if (selectedLeads.size === currentFiltered.length) {
+      selectedLeads = new Set();
+    } else {
+      selectedLeads = new Set(currentFiltered.map((l: any) => l.id));
+    }
+  }
+
+  function toggleSelectLead(id: number) {
+    const newSet = new Set(selectedLeads);
+    if (newSet.has(id)) {
+      newSet.delete(id);
+    } else {
+      newSet.add(id);
+    }
+    selectedLeads = newSet;
+  }
+
+  async function deleteLeads(ids: number[]) {
+    if (ids.length === 0) return;
+
+    const confirmMessage = ids.length === 1 
+      ? 'Tem certeza que deseja excluir este lead?' 
+      : `Tem certeza que deseja excluir ${ids.length} leads?`;
+
+    if (!confirm(confirmMessage)) return;
+
+    const companyId = effectiveCompanyIdValue || userValue?.companyId;
+    if (!companyId) {
+      alert('Erro: Empresa não identificada.');
+      return;
+    }
+
+    deleting = true;
+    const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/leads-delete';
+
+    try {
+      const response = await fetch(WEBHOOK_URL, {
+        method: 'POST', // Using POST as per typical webhook patterns in this project, or DELETE if supported
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          companyId,
+          leadIds: ids
+        })
+      });
+
+      if (response.ok) {
+        // Remove deleted leads from local state
+        leads = leads.filter((l: any) => !ids.includes(l.id));
+        selectedLeads = new Set();
+        if (showDetailModal && selectedLead && ids.includes(selectedLead.id)) {
+          showDetailModal = false;
+        }
+      } else {
+        alert('Erro ao excluir leads. Tente novamente.');
+      }
+    } catch (error) {
+      console.error('[v0] Error deleting leads:', error);
+      alert('Erro ao excluir leads. Tente novamente.');
+    } finally {
+      deleting = false;
+    }
+  }
+
   function exportToCSV() {
     const headers = ['ID', 'Nome', 'Email', 'Telefone', 'Categoria', 'Curso', 'Vendedor', 'Primeiro Contato', 'Status', 'Observações'];
     const csvData = leads.map(lead => [
@@ -358,6 +428,22 @@
         {/if}
       </div>
       <div class="flex gap-3">
+        {#if canDelete && selectedLeads.size > 0}
+          <button
+            onclick={() => deleteLeads(Array.from(selectedLeads))}
+            disabled={deleting}
+            class="flex items-center gap-2 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
+          >
+            {#if deleting}
+              <div class="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+            {:else}
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+              </svg>
+            {/if}
+            Excluir ({selectedLeads.size})
+          </button>
+        {/if}
         <button
           onclick={openNewLeadModal}
           class="flex items-center gap-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
@@ -478,6 +564,16 @@
             <table class="w-full">
               <thead>
                 <tr class="border-b border-zinc-700 bg-zinc-800/50">
+                  {#if canDelete}
+                    <th class="text-left p-4 w-10">
+                      <input 
+                        type="checkbox" 
+                        checked={selectedLeads.size > 0 && selectedLeads.size === filteredLeads().length}
+                        onclick={toggleSelectAll}
+                        class="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-green-600 focus:ring-green-600"
+                      />
+                    </th>
+                  {/if}
                   <th class="text-left p-4 text-sm font-medium text-zinc-400">ID</th>
                   <th class="text-left p-4 text-sm font-medium text-white">Nome</th>
                   <th class="text-left p-4 text-sm font-medium text-white">Categoria</th>
@@ -491,6 +587,16 @@
               <tbody>
                 {#each filteredLeads() as lead}
                   <tr class="border-b border-zinc-700 hover:bg-zinc-800/50 hover:border-l-4 hover:border-l-green-600 transition-all">
+                    {#if canDelete}
+                      <td class="p-4">
+                        <input 
+                          type="checkbox" 
+                          checked={selectedLeads.has(lead.id)}
+                          onclick={() => toggleSelectLead(lead.id)}
+                          class="w-4 h-4 rounded border-zinc-600 bg-zinc-700 text-green-600 focus:ring-green-600"
+                        />
+                      </td>
+                    {/if}
                     <td class="p-4 text-sm text-zinc-400">#{lead.id}</td>
                     <td class="p-4 text-sm text-white font-medium">{lead.name}</td>
                     <td class="p-4 text-sm text-white">{lead.category}</td>
@@ -506,6 +612,17 @@
                       >
                         Ver detalhes
                       </button>
+                      {#if canDelete}
+                        <button
+                          onclick={() => deleteLeads([lead.id])}
+                          class="text-red-500 hover:text-red-400 text-sm font-medium ml-3"
+                          title="Excluir"
+                        >
+                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                          </svg>
+                        </button>
+                      {/if}
                     </td>
                   </tr>
                 {/each}

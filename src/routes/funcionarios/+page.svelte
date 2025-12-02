@@ -251,19 +251,21 @@
 
     try {
       const webhookUrl = isEditing
-        ? 'https://n8n-production-8686.up.railway.app/webhook/update-employee'
-        : 'https://n8n-production-8686.up.railway.app/webhook/create-employee';
+        ? 'https://auto.agiussolar.cloud/webhook/editar-funcionario'
+        : 'https://auto.agiussolar.cloud/webhook/criar-funcionario';
 
       const payload: any = {
+        id: currentEmployee.id,
         name: currentEmployee.name,
         email: currentEmployee.email,
         phone: currentEmployee.phone,
+        password: currentEmployee.password,
         role: currentEmployee.role,
-        company_id: isFranqueadoraValue ? currentEmployee.company_id : effectiveCompanyIdValue
+        companyId: isFranqueadoraValue ? currentEmployee.company_id : effectiveCompanyIdValue
       };
 
       const response = await fetch(webhookUrl, {
-        method: isEditing ? 'PUT' : 'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
