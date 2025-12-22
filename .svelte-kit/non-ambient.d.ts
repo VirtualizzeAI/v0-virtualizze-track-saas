@@ -27,12 +27,13 @@ export {};
 
 declare module "$app/types" {
 	export interface AppTypes {
-		RouteId(): "/" | "/cursos" | "/dashboard" | "/disparo" | "/funcionarios" | "/leads" | "/nova-senha" | "/perfil" | "/super-admin";
+		RouteId(): "/" | "/conexoes" | "/cursos" | "/dashboard" | "/disparo" | "/funcionarios" | "/leads" | "/nova-senha" | "/perfil" | "/super-admin";
 		RouteParams(): {
 			
 		};
 		LayoutParams(): {
 			"/": Record<string, never>;
+			"/conexoes": Record<string, never>;
 			"/cursos": Record<string, never>;
 			"/dashboard": Record<string, never>;
 			"/disparo": Record<string, never>;
@@ -42,7 +43,7 @@ declare module "$app/types" {
 			"/perfil": Record<string, never>;
 			"/super-admin": Record<string, never>
 		};
-		Pathname(): "/" | "/cursos" | "/cursos/" | "/dashboard" | "/dashboard/" | "/disparo" | "/disparo/" | "/funcionarios" | "/funcionarios/" | "/leads" | "/leads/" | "/nova-senha" | "/nova-senha/" | "/perfil" | "/perfil/" | "/super-admin" | "/super-admin/";
+		Pathname(): "/" | "/conexoes" | "/conexoes/" | "/cursos" | "/cursos/" | "/dashboard" | "/dashboard/" | "/disparo" | "/disparo/" | "/funcionarios" | "/funcionarios/" | "/leads" | "/leads/" | "/nova-senha" | "/nova-senha/" | "/perfil" | "/perfil/" | "/super-admin" | "/super-admin/";
 		ResolvedPathname(): `${"" | `/${string}`}${ReturnType<AppTypes['Pathname']>}`;
 		Asset(): "/favicon.png" | "/header.png" | string & {};
 	}

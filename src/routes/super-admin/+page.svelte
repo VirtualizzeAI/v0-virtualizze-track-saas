@@ -798,6 +798,7 @@
             <option value="funcionario">Funcionário</option>
             <option value="coordenador">Coordenador</option>
             <option value="direcao">Direção</option>
+            <option value="franqueadora">Franqueadora</option>
           </select>
         </div>
 

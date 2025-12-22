@@ -301,6 +301,76 @@ Todos os webhooks estão marcados com o comentário `<WEBHOOK>` no código. Subs
 
 ---
 
+## 📢 Disparos em Massa
+
+### Histórico de Disparos
+- **Arquivo**: `src/routes/disparo/+page.svelte`
+- **Função**: `fetchBlasts()`
+- **Método**: GET
+- **URL**: `https://auto.agiussolar.cloud/webhook/leads-blast-history`
+- **Resposta esperada**:
+```json
+[
+  {
+    "id": 1,
+    "name": "Promoção Natal",
+    "user": "João Silva",
+    "total": 150,
+    "success": 145,
+    "failure": 5,
+    "date": "2023-12-01T10:00:00",
+    "status": "approved|pending|cancelled|rejected"
+  }
+]
+```
+
+### Enviar Disparo (Solicitar)
+- **Arquivo**: `src/routes/disparo/+page.svelte`
+- **Função**: `handleSend()`
+- **Método**: POST
+- **URL**: `https://auto.agiussolar.cloud/webhook/leads-blast-send`
+- **Body**:
+```json
+{
+  "name": "string",
+  "message": "string",
+  "channelId": "string",
+  "useAI": boolean,
+  "randomInterval": boolean,
+  "companyId": "number",
+  "userId": "string"
+}
+```
+- **Nota**: Se o usuário for "funcionario", o backend deve salvar com status "pending". Se for "coordenador" ou superior, pode processar imediatamente ou salvar como "approved".
+
+### Aprovar Disparo
+- **Arquivo**: `src/routes/disparo/+page.svelte`
+- **Função**: `approveBlast()`
+- **Método**: POST
+- **URL**: `https://auto.agiussolar.cloud/webhook/leads-blast-approve`
+- **Body**:
+```json
+{
+  "blastId": "number",
+  "userId": "string" // ID do coordenador que aprovou
+}
+```
+
+### Cancelar Disparo
+- **Arquivo**: `src/routes/disparo/+page.svelte`
+- **Função**: `cancelBlast()`
+- **Método**: POST
+- **URL**: `https://auto.agiussolar.cloud/webhook/leads-blast-cancel`
+- **Body**:
+```json
+{
+  "blastId": "number",
+  "userId": "string" // ID do coordenador que cancelou
+}
+```
+
+---
+
 ## 🔍 Como Encontrar os Webhooks no Código
 
 Todos os webhooks estão marcados com o comentário:
