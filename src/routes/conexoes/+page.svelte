@@ -393,7 +393,7 @@
       
       <!-- Connection Form (Box 1) -->
       <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-8 h-fit">
-        <h2 class="text-xl font-semibold text-white mb-6">Nova Conexão</h2>
+        <h2 class="text-xl font-semibold text-white mb-6">Cadastrar Novo Número</h2>
         <div class="space-y-6">
           <div>
             <label class="block text-sm font-medium text-white mb-2" for="connName">Nome da Conexão</label>
@@ -430,7 +430,7 @@
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
               </svg>
-              Criar Nova Conexão
+              Cadastrar Número
             {/if}
           </button>
         </div>
