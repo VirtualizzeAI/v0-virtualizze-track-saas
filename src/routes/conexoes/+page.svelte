@@ -244,10 +244,37 @@
       openConfirm(
         'Apagar Conexão',
         `Tem certeza que deseja apagar a conexão "${connection.nomeConexao}"?`,
-        () => {
-           alert(`[MOCK] Deletando conexão: ${connection.nomeConexao} (Endpoint pendente)`);
-           closeConfirm();
-           // Implement fetch to delete here when endpoint available
+        async () => {
+          closeConfirm();
+          try {
+            loadingConnections = true;
+
+            const payload = {
+              nomeConexao: connection.nomeConexao,
+              companyId: effectiveCompanyIdValue || userValue?.companyId,
+              numero: connection.numero
+            };
+
+            const response = await fetch('https://auto.agiussolar.cloud/webhook/deletar-numero', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(payload)
+            });
+
+            const data = await response.json();
+
+            if (response.ok && data && data.success) {
+              openFeedback('success', 'Sucesso', 'Conexão apagada com sucesso!');
+              fetchConnections();
+            } else {
+              openFeedback('error', 'Erro', 'Falha ao apagar conexão: ' + (data?.message || 'Resposta inválida'));
+            }
+          } catch (error) {
+            console.error('Erro ao apagar conexão:', error);
+            openFeedback('error', 'Erro', 'Erro ao conectar com o servidor.');
+          } finally {
+            loadingConnections = false;
+          }
         }
       );
     } else if (action === 'disconnect') {

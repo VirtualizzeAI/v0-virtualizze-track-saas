@@ -576,28 +576,6 @@
               ></textarea>
             </div>
 
-            <div class="grid grid-cols-2 gap-4">
-              <div class="flex items-center justify-between p-4 bg-zinc-800 rounded-lg border border-zinc-700">
-                <span class="text-sm font-medium text-white">Otimizar com IA</span>
-                <button 
-                  onclick={() => blastForm.useAI = !blastForm.useAI}
-                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors {blastForm.useAI ? 'bg-green-600' : 'bg-zinc-600'}"
-                >
-                  <span class="translate-x-1 inline-block h-4 w-4 transform rounded-full bg-white transition-transform {blastForm.useAI ? 'translate-x-6' : 'translate-x-1'}"></span>
-                </button>
-              </div>
-
-              <div class="flex items-center justify-between p-4 bg-zinc-800 rounded-lg border border-zinc-700">
-                <span class="text-sm font-medium text-white">Intervalo Aleatório</span>
-                <button 
-                  onclick={() => blastForm.randomInterval = !blastForm.randomInterval}
-                  class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors {blastForm.randomInterval ? 'bg-green-600' : 'bg-zinc-600'}"
-                >
-                  <span class="translate-x-1 inline-block h-4 w-4 transform rounded-full bg-white transition-transform {blastForm.randomInterval ? 'translate-x-6' : 'translate-x-1'}"></span>
-                </button>
-              </div>
-            </div>
-
             <div>
               <label class="block text-sm font-medium text-white mb-2" for="blastChannel">Canal de Envio</label>
               <select
