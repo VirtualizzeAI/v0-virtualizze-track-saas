@@ -102,7 +102,8 @@
         try {
           const dispPayload = {
             companyId: effectiveCompanyIdValue,
-            userId: userValue?.id
+            userId: userValue?.id,
+            userRole: userValue?.role
           };
 
           const respDisp = await fetch('https://auto.agiussolar.cloud/webhook/numeros-disparos', {
