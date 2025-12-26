@@ -71,6 +71,11 @@
     if (!target.closest('.connection-menu-button') && !target.closest('.connection-menu-dropdown')) {
       openMenuIndex = null;
     }
+
+    // Close mass blast dropdown when clicking outside
+    if (!target.closest('.massblast-button') && !target.closest('.massblast-dropdown')) {
+      massBlastDropdownOpen = false;
+    }
   }
 
   async function fetchConnections() {
@@ -92,6 +97,49 @@
       const data = await response.json();
       if (data && data.listaConexao) {
         connections = data.listaConexao;
+
+        // Após carregar conexões, buscar números permitidos para disparo
+        try {
+          const dispPayload = {
+            companyId: effectiveCompanyIdValue,
+            userId: userValue?.id
+          };
+
+          const respDisp = await fetch('https://auto.agiussolar.cloud/webhook/numeros-disparos', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(dispPayload)
+          });
+
+          const dispData = await respDisp.json();
+
+          // dispData pode ser um array ou um objeto com chave (tentar suportar ambos)
+          let allowedList: any[] = [];
+          if (Array.isArray(dispData)) {
+            allowedList = dispData;
+          } else if (dispData && Array.isArray(dispData.lista)) {
+            allowedList = dispData.lista;
+          } else if (dispData && Array.isArray(dispData.numeros)) {
+            allowedList = dispData.numeros;
+          }
+
+          const allowedSet = new Set(allowedList.map((x: any) => String(x.numero)));
+
+          // Inicializar selectedMassBlast apenas com as conexões atuais que estão permitidas
+          selectedMassBlast = connections.filter((c: any) => allowedSet.has(String(c.numero)));
+
+          // Construir mapa de estados ativos a partir da lista retornada
+          const map: Record<string, boolean> = {};
+          for (const c of connections) {
+            map[c.numero] = allowedSet.has(String(c.numero));
+          }
+          activeMassBlast = map;
+        } catch (e) {
+          console.error('[Conexões] Erro ao carregar números de disparo:', e);
+          // manter comportamento padrão sem seleção
+          selectedMassBlast = [];
+          activeMassBlast = {};
+        }
       }
     } catch (error) {
       console.error('[Conexões] Error fetching connections:', error);
@@ -153,47 +201,65 @@
     loading = true;
     const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/criar-conexao';
 
+    // Allow multiple numbers separated by comma / semicolon / newline
+    const rawNumbers = (connectionForm.number || '').split(/[,;\n]+/).map(s => s.trim()).filter(Boolean);
+    const sanitizedNumbers = rawNumbers.map(n => n.replace(/\D/g, ''));
+
+    let firstQrShown = false;
+    const results: { numero: string; ok: boolean; data?: any }[] = [];
+
     try {
-      const payload = {
-        name: connectionForm.name,
-        number: connectionForm.number.replace(/\D/g, ''), // Remove non-digits
-        userId: userValue?.id,
-        userName: userValue?.name,
-        companyId: effectiveCompanyIdValue || userValue?.companyId
-      };
+      for (const numero of sanitizedNumbers) {
+        const payload = {
+          name: connectionForm.name,
+          number: numero,
+          userId: userValue?.id,
+          userName: userValue?.name,
+          companyId: effectiveCompanyIdValue || userValue?.companyId
+        };
 
-      const response = await fetch(WEBHOOK_URL, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
+        try {
+          const response = await fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
 
-      const data = await response.json();
+          const data = await response.json();
+          results.push({ numero, ok: response.ok, data });
 
-      if (response.ok) {
-        if (data.qrCode) {
-          qrCodeUrl = data.qrCode;
-          connectionId = data.id;
-          showQrModal = true;
-          
-          // Setup polling target
-          pollingTarget = {
-            nomeConexao: connectionForm.name,
-            companyId: payload.companyId,
-            numero: payload.number
-          };
+          if (response.ok && data.qrCode && !firstQrShown) {
+            qrCodeUrl = data.qrCode;
+            connectionId = data.id;
+            showQrModal = true;
 
-          // Start polling
-          if (pollingInterval) clearInterval(pollingInterval);
-          pollingInterval = setInterval(checkConnectionStatus, 3000);
-        } else {
-          alert('Conexão solicitada, mas nenhum QR Code foi retornado.');
+            pollingTarget = {
+              nomeConexao: connectionForm.name,
+              companyId: payload.companyId,
+              numero: numero
+            };
+
+            if (pollingInterval) clearInterval(pollingInterval);
+            pollingInterval = setInterval(checkConnectionStatus, 3000);
+            firstQrShown = true;
+          }
+        } catch (innerError) {
+          console.error('[Conexões] Error creating connection (one of multiple):', innerError);
+          results.push({ numero, ok: false });
         }
-      } else {
-        alert('Erro ao solicitar conexão. Tente novamente.');
+      }
+
+      // After attempting all, refresh list
+      fetchConnections();
+
+      const failed = results.filter(r => !r.ok).map(r => r.numero);
+      if (failed.length > 0) {
+        openFeedback('error', 'Alguns falharam', `Falha ao cadastrar: ${failed.join(', ')}`);
+      } else if (!firstQrShown) {
+        openFeedback('success', 'Sucesso', 'Número(s) cadastrados com sucesso.');
       }
     } catch (error) {
-      console.error('[Conexões] Error creating connection:', error);
+      console.error('[Conexões] Error creating connections:', error);
       alert('Erro ao conectar com o servidor.');
     } finally {
       loading = false;
@@ -354,31 +420,51 @@
     openMenuIndex = null;
   }
   // Mass Blast State
-  let massBlastSearch = $state('');
-  
-  // Create a derived state for filtered connections (using a function since $derived isn't explicit in this variable declaration style yet or standard svelte 5 runes might differ, assuming standard let/reactive)
-  // In Svelte 5 runes:
-  let filteredConnections = $derived(
-    connections.filter(c => 
-      c.nomeConexao?.toLowerCase().includes(massBlastSearch.toLowerCase()) || 
-      c.numero?.includes(massBlastSearch)
-    )
-  );
+  // Selected connections shown in the list (starts empty)
+  let selectedMassBlast = $state<any[]>([]);
+  // Map numero -> boolean to control checkbox state
+  let activeMassBlast = $state<Record<string, boolean>>({});
+  // Dropdown open state
+  let massBlastDropdownOpen = $state(false);
 
-  async function handleMassBlastToggle(connection: any, event: Event) {
-    const isChecked = (event.target as HTMLInputElement).checked;
-    
-    // Optimistic update (optional, but good UX)
-    // For now we just fire and forget or alert on error? 
-    // User requested: "enviando ... valor da checkbox".
-    
+  function toggleMassBlastDropdown(e: Event) {
+    e.stopPropagation();
+    massBlastDropdownOpen = !massBlastDropdownOpen;
+  }
+
+  function toggleMassBlastOption(conn: any) {
+    const exists = selectedMassBlast.find(c => c.numero === conn.numero);
+    if (exists) {
+      // remove
+      selectedMassBlast = selectedMassBlast.filter(c => c.numero !== conn.numero);
+      activeMassBlast = { ...activeMassBlast, [conn.numero]: false };
+      handleMassBlastToggle(conn, false);
+    } else {
+      // add
+      selectedMassBlast = [...selectedMassBlast, conn];
+      activeMassBlast = { ...activeMassBlast, [conn.numero]: true };
+      handleMassBlastToggle(conn, true);
+    }
+  }
+
+  // Unified toggle function: accepts either an Event (from checkbox) or a boolean (programmatic)
+  async function handleMassBlastToggle(connection: any, eventOrChecked: Event | boolean) {
+    const isChecked = typeof eventOrChecked === 'boolean'
+      ? eventOrChecked
+      : ((eventOrChecked.target as HTMLInputElement).checked);
+
+    // Optimistic local state update
+    activeMassBlast = { ...activeMassBlast, [connection.numero]: isChecked };
+
     try {
-       const payload = {
+      const payload = {
+        nomeConexao: connection.nomeConexao,
         companyId: effectiveCompanyIdValue || userValue?.companyId,
         userId: userValue?.id,
         userRole: userValue?.role,
         numero: connection.numero,
-        ativar: isChecked // "valor da checkbox" - true/false
+        ativar: isChecked,
+        status: isChecked // retrocompatibilidade: enviar também 'status'
       };
 
       const response = await fetch('https://auto.agiussolar.cloud/webhook/ativar-disparo', {
@@ -386,21 +472,20 @@
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok || !data) {
-        // Revert check if failed?
-        (event.target as HTMLInputElement).checked = !isChecked;
+        // Revert optimistic change
+        activeMassBlast = { ...activeMassBlast, [connection.numero]: !isChecked };
         openFeedback('error', 'Erro', 'Falha ao atualizar status de disparo.');
       } else {
-        // Assume success
         console.log('Status de disparo atualizado:', data);
       }
     } catch (error) {
       console.error('Erro ao ativar disparo:', error);
-      (event.target as HTMLInputElement).checked = !isChecked;
-       openFeedback('error', 'Erro', 'Erro de conexão.');
+      activeMassBlast = { ...activeMassBlast, [connection.numero]: !isChecked };
+      openFeedback('error', 'Erro', 'Erro de conexão.');
     }
   }
 </script>
@@ -468,27 +553,60 @@
         <h2 class="text-xl font-semibold text-white mb-6">Configuração de Disparo</h2>
         <p class="text-sm text-zinc-400 mb-4">Selecione os números que serão utilizados para o envio de mensagens em massa.</p>
         
-        <!-- Search -->
+        <!-- Dropdown select to choose numbers for mass blast -->
         <div class="mb-4 relative">
-          <input
-            type="text"
-            bind:value={massBlastSearch}
-            placeholder="Pesquisar número ou nome..."
-            class="w-full pl-10 pr-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-white placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600 text-sm"
-          />
-           <svg class="w-4 h-4 text-zinc-500 absolute left-3 top-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
-            </svg>
+          <label class="block text-sm font-medium text-zinc-400 mb-2">Selecione números para disparo</label>
+          <div class="relative">
+            <button
+              type="button"
+              class="massblast-button w-full text-left bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 flex items-center justify-between text-white"
+              onclick={toggleMassBlastDropdown}
+            >
+              <span class="text-sm">
+                {#if selectedMassBlast.length === 0}
+                  Selecionar números...
+                {:else}
+                  {selectedMassBlast.length} selecionado(s)
+                {/if}
+              </span>
+              <svg class="w-4 h-4 text-zinc-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+              </svg>
+            </button>
+
+            {#if massBlastDropdownOpen}
+              <div class="massblast-dropdown absolute z-40 mt-2 w-full max-h-64 overflow-auto bg-zinc-900 border border-zinc-800 rounded-lg p-2 shadow-lg">
+                {#if connections.length === 0}
+                  <div class="text-sm text-zinc-500 p-2">Nenhuma conexão disponível.</div>
+                {:else}
+                  {#each connections as conn}
+                    <div
+                      class="flex items-center justify-between p-2 rounded hover:bg-zinc-800/40 cursor-pointer"
+                      onclick={() => toggleMassBlastOption(conn)}
+                    >
+                      <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 text-xs">
+                          {conn.nomeConexao?.charAt(0).toUpperCase() || '?'}
+                        </div>
+                        <div class="flex flex-col text-sm">
+                          <span class="text-zinc-200">{conn.nomeConexao}</span>
+                          <span class="text-xs text-zinc-500">{conn.numero}</span>
+                        </div>
+                      </div>
+                    </div>
+                  {/each}
+                {/if}
+              </div>
+            {/if}
+          </div>
         </div>
 
-        <!-- List -->
+        <!-- List of selected numbers -->
         <div class="flex-1 overflow-y-auto max-h-[300px] border border-zinc-800 rounded-lg bg-zinc-950/50 p-2 space-y-1 custom-scrollbar">
-          {#if connections.length === 0}
-            <div class="text-center py-8 text-zinc-500 text-sm">Nenhuma conexão disponível.</div>
-          {:else if filteredConnections.length === 0}
-             <div class="text-center py-8 text-zinc-500 text-sm">Nenhum resultado encontrado.</div>
+          {#if selectedMassBlast.length === 0}
+            <div class="text-center py-8 text-zinc-500 text-sm">Nenhum número selecionado.</div>
           {:else}
-            {#each filteredConnections as conn}
+            {#each selectedMassBlast as conn}
               <label class="flex items-center justify-between p-3 rounded-md hover:bg-zinc-800/50 cursor-pointer transition-colors group">
                 <div class="flex items-center gap-3">
                    <div class="w-8 h-8 rounded-full bg-zinc-800 flex items-center justify-center text-zinc-400 text-xs">
@@ -505,7 +623,8 @@
                     type="checkbox" 
                     value="" 
                     class="sr-only peer"
-                    onchange={(e) => handleMassBlastToggle(conn, e)}
+                    checked={!!activeMassBlast[conn.numero]}
+                    onchange={(e) => { e.stopPropagation(); handleMassBlastToggle(conn, e); }}
                   >
                   <div class="w-9 h-5 bg-zinc-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-green-600"></div>
                 </div>
