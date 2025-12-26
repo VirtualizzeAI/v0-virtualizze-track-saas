@@ -29,6 +29,8 @@
   // Connections State
   let connections = $state([]);
   let loadingConnections = $state(false);
+  // Allowed channels (números disponíveis para disparo)
+  let allowedChannels = $state<any[]>([]);
 
   // Disparar State
   let blastForm = $state({
@@ -43,6 +45,51 @@
   let sending = $state(false);
   let sendingProgress = $state({ sent: 0, total: 0, status: 'idle' }); // idle, sending, completed
   let imagePreview = $state('');
+  // Uploaded spreadsheet numbers
+  let uploadedNumbers = $state<string[]>([]);
+  let uploading = $state(false);
+  // Raw uploaded file to be sent to backend if client can't parse
+  let uploadedFile = $state(null);
+  
+
+  async function handleSpreadsheetFile(file: File) {
+    // reuse existing logic from handleSpreadsheetSelect but accepts File directly
+    const name = file.name.toLowerCase();
+    uploading = true;
+    try {
+      // Always preserve the raw file to send to backend
+      uploadedFile = file;
+      uploadedNumbers = [];
+      if (file.type.startsWith('text') || name.endsWith('.csv') || name.endsWith('.txt')) {
+        const text = await file.text();
+        const candidates = text.split(/[\r\n]+/).flatMap(line => line.split(/[;,]+/));
+        const nums = candidates
+          .map(s => (s || '').replace(/[^0-9+]/g, ''))
+          .map(s => s.replace(/^\+/, ''))
+          .map(s => s.replace(/^0+/, ''))
+          .filter(s => s.length >= 8 && s.length <= 15);
+        uploadedNumbers = Array.from(new Set(nums));
+        if (uploadedNumbers.length === 0) uploadedFile = file;
+      } else {
+        uploadedFile = file;
+        try {
+          const buffer = await file.arrayBuffer();
+          const text = new TextDecoder('utf-8').decode(buffer);
+          const nums = Array.from(text.matchAll(/\+?[0-9][0-9\s\-().]{6,20}[0-9]/g)).map(m => m[0].replace(/[^0-9]/g, '')).map(s => s.replace(/^0+/, '')).filter(s => s.length >= 8 && s.length <= 15);
+          uploadedNumbers = Array.from(new Set(nums));
+        } catch (inner) {
+          // ignore
+        }
+      }
+    } catch (error) {
+      console.error('[Disparo] Erro ao processar planilha:', error);
+      alert('Erro ao processar arquivo.');
+      uploadedNumbers = [];
+      uploadedFile = null;
+    } finally {
+      uploading = false;
+    }
+  }
 
   onMount(() => {
     const unsubAuth = isAuthenticated.subscribe((value) => {
@@ -66,17 +113,22 @@
         fetchBlasts();
         fetchPlanUsage();
         fetchConnections();
+        // Chamar fetchAllowedChannels somente se já tivermos o usuário carregado
+        if (userValue) fetchAllowedChannels();
       }
     });
 
     const unsubUser = user.subscribe(value => {
       userValue = value;
+      // Se já tivermos companyId, carregar canais assim que o usuário estiver disponível
+      if (effectiveCompanyIdValue) fetchAllowedChannels();
     });
 
     if (isAuthenticatedValue) {
       fetchBlasts();
       fetchPlanUsage();
       fetchConnections();
+      // fetchAllowedChannels será chamado automaticamente quando ambos os valores estiverem definidos
     }
 
     const unsubManager = isManager.subscribe(value => {
@@ -119,23 +171,45 @@
   }
 
   async function fetchBlasts() {
-    // TODO: Replace with actual webhook
-    // const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/leads-blast-history';
-    
+    const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/listar-disparos-pendentes';
+
     loadingHistory = true;
     try {
-      // Mock data for now
-      await new Promise(resolve => setTimeout(resolve, 800));
-      
-      const mockBlasts = [
-        { id: 1, name: 'Promoção Natal', user: 'João Silva', total: 150, success: 145, failure: 5, date: '2023-12-01T10:00:00', status: 'approved' },
-        { id: 2, name: 'Aviso Manutenção', user: 'Maria Souza', total: 50, success: 50, failure: 0, date: '2023-11-28T14:30:00', status: 'approved' },
-        { id: 3, name: 'Oferta Relâmpago', user: 'Pedro Santos', total: 0, success: 0, failure: 0, date: '2023-12-03T09:00:00', status: 'pending' },
-      ];
-      
-      blasts = mockBlasts;
+      const uid = userValue?.id ?? userValue?.userId ?? userValue?.userid ?? userValue?.user_id ?? null;
+      const payload = { companyId: effectiveCompanyIdValue, userId: uid, userRole: userValue?.role };
+
+      const resp = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await resp.json().catch(() => null);
+
+      let list: any[] = [];
+      if (Array.isArray(data)) {
+        list = data;
+      } else if (data && Array.isArray(data.lista)) {
+        list = data.lista;
+      } else if (data && Array.isArray(data.disparos)) {
+        list = data.disparos;
+      } else if (data && Array.isArray(data.data)) {
+        list = data.data;
+      }
+
+      // Normalize items to UI shape
+      blasts = list.map((item: any) => ({
+        id: item.id ?? item.disparoId ?? item._id ?? Date.now(),
+        name: item.name ?? item.nome ?? item.campaignName ?? item.title ?? 'Lista',
+        user: item.user ?? item.usuario ?? item.userName ?? (item.createdBy || (item.user && item.user.name)) ?? 'Usuário',        total: item.total ?? item.total_numbers ?? item.total_sent ?? 0,
+        success: item.success ?? item.success_count ?? item.sentSuccess ?? 0,
+        failure: item.failure ?? item.failure_count ?? item.failed ?? 0,
+        date: item.date ?? item.created_at ?? item.createdAt ?? new Date().toISOString(),
+        status: item.status ?? item.estado ?? item.situacao ?? 'approved'
+      }));
     } catch (error) {
       console.error('[v0] Error fetching blasts:', error);
+      blasts = [];
     } finally {
       loadingHistory = false;
     }
@@ -173,6 +247,53 @@
     }
   }
 
+  async function fetchAllowedChannels() {
+    loadingConnections = true;
+    try {
+      const uid = userValue?.id ?? userValue?.userId ?? userValue?.userid ?? userValue?.user_id ?? null;
+      const payload = {
+        companyId: effectiveCompanyIdValue,
+        userId: uid
+      };
+
+      if (!uid) {
+        console.warn('[Disparo] userId ausente ao chamar numeros-disparos, enviando null. userValue=', userValue);
+      }
+
+      const response = await fetch('https://auto.agiussolar.cloud/webhook/numeros-disparos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await response.json();
+
+      let list: any[] = [];
+      if (Array.isArray(data)) {
+        list = data;
+      } else if (data && Array.isArray(data.lista)) {
+        list = data.lista;
+      } else if (data && Array.isArray(data.numeros)) {
+        list = data.numeros;
+      } else if (data && Array.isArray(data.data)) {
+        list = data.data;
+      }
+
+      // Normalize items to have { numero, nomeConexao, status }
+      allowedChannels = list.map((item: any) => ({
+        numero: item.numero || item.number || item.phone,
+        nomeConexao: item.nomeConexao || item.name || item.label || '',
+        status: (item.status || item.status_conexao || item.connected) ? (String(item.status || item.status_conexao || item.connected)) : 'connected'
+      }));
+
+    } catch (error) {
+      console.error('[Disparo] Error fetching allowed channels:', error);
+      allowedChannels = [];
+    } finally {
+      loadingConnections = false;
+    }
+  }
+
   function handleImageSelect(event: Event) {
     const input = event.target as HTMLInputElement;
     if (input.files && input.files[0]) {
@@ -181,13 +302,71 @@
     }
   }
 
-  async function handleSend() {
+  async function handleSpreadsheetSelect(event: Event) {
+    const input = event.target as HTMLInputElement;
+    if (!input.files || input.files.length === 0) return;
+    const file = input.files[0];
+    const name = file.name.toLowerCase();
+    uploading = true;
+    try {
+      // Always preserve the raw file to send to backend
+      uploadedFile = file;
+      uploadedNumbers = [];
+      // If it's a text-like file or CSV by extension, parse client-side
+      if (file.type.startsWith('text') || name.endsWith('.csv') || name.endsWith('.txt')) {
+        const text = await file.text();
+        // Split by lines and common separators; extract number-like sequences
+        const candidates = text.split(/[\r\n]+/).flatMap(line => line.split(/[;,]+/));
+        const nums = candidates
+          .map(s => (s || '').replace(/[^0-9+]/g, ''))
+          .map(s => s.replace(/^\+/, ''))
+          .map(s => s.replace(/^0+/, ''))
+          .filter(s => s.length >= 8 && s.length <= 15);
+        uploadedNumbers = Array.from(new Set(nums));
+      } else {
+        // For binary spreadsheets (xlsx, xls, ods, etc), keep the file to send to backend
+        // Try best-effort decode to text to extract numbers (may or may not work)
+        try {
+          const buffer = await file.arrayBuffer();
+          const text = new TextDecoder('utf-8').decode(buffer);
+          const nums = Array.from(text.matchAll(/\+?[0-9][0-9\s\-().]{6,20}[0-9]/g)).map(m => m[0].replace(/[^0-9]/g, ''))
+            .map(s => s.replace(/^0+/, ''))
+            .filter(s => s.length >= 8 && s.length <= 15);
+          uploadedNumbers = Array.from(new Set(nums));
+        } catch (inner) {
+          // ignore
+        }
+      }
+    } catch (error) {
+      console.error('[Disparo] Erro ao processar planilha:', error);
+      alert('Erro ao processar arquivo.');
+      uploadedNumbers = [];
+      uploadedFile = null;
+    } finally {
+      uploading = false;
+      // reset input value to allow re-upload same file
+      if (input) input.value = '';
+    }
+  }
+
+  async function handleSend(force = false) {
+    console.debug('[Disparo] handleSend called', { effectiveCompanyIdValue, userValue, blastForm, uploadedNumbers, uploadedFile });
+    try {
+      const domMsg = document.getElementById('blastMessage')?.value;
+      console.debug('[Disparo] DOM #blastMessage value:', domMsg);
+      console.debug('[Disparo] blastForm.message value:', blastForm.message);
+    } catch (err) {
+      console.warn('[Disparo] could not read DOM blastMessage', err);
+    }
+
     if (!blastForm.message) {
+      console.warn('[Disparo] Aborting send: empty message');
       alert('Por favor, digite uma mensagem.');
       return;
     }
 
     if (!effectiveCompanyIdValue && !userValue?.companyId) {
+      console.warn('[Disparo] Aborting send: company not identified', { effectiveCompanyIdValue, userValue });
       alert('Erro: Empresa não identificada.');
       return;
     }
@@ -198,93 +377,131 @@
       return;
     }
 
-    // Check if user is funcionario
-    if (userValue?.role === 'funcionario') {
-      // Create pending blast
-      const newBlast = {
-        id: Date.now(),
-        name: blastForm.name,
-        user: userValue.name,
-        total: 0, // Will be calculated when approved/sent
-        success: 0,
-        failure: 0,
-        date: new Date().toISOString(),
-        status: 'pending'
-      };
-      
-      // Add to local list (mock)
-      blasts = [newBlast, ...blasts];
-      
-      alert('Disparo enviado para aprovação do coordenador.');
-      
-      // Reset form
-      blastForm = {
-        name: '',
-        message: '',
-        image: null,
-        useAI: false,
-        randomInterval: false,
-        channel: '',
-        leadSegment: 'all'
-      };
-      imagePreview = '';
-      activeTab = 'lista';
-      return;
-    }
+    // Determine whether this send requires approval (user is funcionario and not forcing)
+    const requiresApproval = (userValue?.role === 'funcionario') && !force;
 
     sending = true;
-    sendingProgress = { sent: 0, total: 100, status: 'sending' }; // Mock total
+    sendingProgress = { sent: 0, total: 0, status: 'sending' };
 
-    // TODO: Replace with actual webhook
-    // const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/leads-blast-send';
+    const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/novo-disparo';
 
     try {
-      // Simulate sending progress
-      const interval = setInterval(() => {
-        sendingProgress.sent += 5;
-        if (sendingProgress.sent >= sendingProgress.total) {
-          clearInterval(interval);
-          sendingProgress.status = 'completed';
-          
-          // Increment usage locally
-          planUsage.disparos_used += sendingProgress.total;
-          
-          setTimeout(() => {
-            sending = false;
-            sendingProgress.status = 'idle';
-            activeTab = 'lista';
-            
-            // Add completed blast to list
-            const newBlast = {
-              id: Date.now(),
-              name: blastForm.name,
-              user: userValue?.name || 'Usuário',
-              total: sendingProgress.total,
-              success: sendingProgress.total,
-              failure: 0,
-              date: new Date().toISOString(),
-              status: 'approved'
-            };
-            blasts = [newBlast, ...blasts];
+      // Build payload
+      const uid = userValue?.id ?? userValue?.userId ?? userValue?.userid ?? userValue?.user_id ?? null;
 
-            // Reset form
-            blastForm = {
-              name: '',
-              message: '',
-              image: null,
-              useAI: false,
-              randomInterval: false,
-              channel: '',
-              leadSegment: 'all'
-            };
-            imagePreview = '';
-          }, 2000);
+      if (uploadedFile) {
+        // Send FormData with file + metadata
+        const form = new FormData();
+        form.append('file', uploadedFile);
+        form.append('name', blastForm.name || '');
+        form.append('message', blastForm.message || '');
+        form.append('channel', blastForm.channel || '');
+        form.append('companyId', String(effectiveCompanyIdValue));
+        form.append('userId', uid ? String(uid) : '');
+        form.append('userRole', userValue?.role || '');
+        form.append('userName', userValue?.name || '');
+        if (uploadedNumbers.length > 0) form.append('numbers', JSON.stringify(uploadedNumbers));
+        if (blastForm.image) form.append('image', blastForm.image);
+
+        console.debug('[Disparo] Sending FormData to', WEBHOOK_URL, { companyId: effectiveCompanyIdValue, userId: uid, keys: Array.from(form.keys()) });
+        const resp = await fetch(WEBHOOK_URL, {
+          method: 'POST',
+          body: form
+        });
+
+        console.debug('[Disparo] Response status', resp.status, resp.statusText);
+        const result = await resp.json().catch(() => ({}));
+        if (resp.ok) {
+          sendingProgress = { sent: 1, total: 1, status: 'completed' };
+          // add to history — mark pending if requires approval
+          const newBlast = { id: Date.now(), name: blastForm.name, user: userValue?.name || 'Usuário', total: result.total || 0, success: result.success || 0, failure: result.failure || 0, date: new Date().toISOString(), status: (requiresApproval ? 'pending' : 'approved') };
+          blasts = [newBlast, ...blasts];
+          if (requiresApproval) {
+            openFeedback && openFeedback('info', 'Enviado', 'Disparo enviado para aprovação do coordenador.');
+            alert('Disparo enviado para aprovação do coordenador.');
+          } else {
+            openFeedback && openFeedback('success', 'Sucesso', 'Disparo criado com sucesso.');
+          }
+        } else {
+          console.error('[Disparo] erro novo-disparo', result);
+          alert('Erro ao criar disparo: ' + (result?.message || resp.statusText));
         }
-      }, 200);
+      } else {
+        // Send JSON payload (numbers array or empty => backend decides)
+        const payload = {
+          name: blastForm.name,
+          message: blastForm.message,
+          channel: blastForm.channel,
+          companyId: effectiveCompanyIdValue,
+          userId: uid,
+          userRole: userValue?.role || '',
+          numbers: uploadedNumbers // may be []
+        };
 
+        if (blastForm.image) {
+          // If image exists but no file to upload, convert to blob via fetch of preview URL when possible
+          try {
+            const imageFile = blastForm.image;
+            const form = new FormData();
+            form.append('image', imageFile);
+            form.append('payload', JSON.stringify(payload));
+            console.debug('[Disparo] Sending image FormData to', WEBHOOK_URL, { payload });
+            const resp = await fetch(WEBHOOK_URL, { method: 'POST', body: form });
+            console.debug('[Disparo] Response status', resp.status, resp.statusText);
+            const result = await resp.json().catch(() => ({}));
+            if (resp.ok) {
+              sendingProgress = { sent: 1, total: 1, status: 'completed' };
+              const newBlast = { id: Date.now(), name: blastForm.name, user: userValue?.name || 'Usuário', total: result.total || 0, success: result.success || 0, failure: result.failure || 0, date: new Date().toISOString(), status: (requiresApproval ? 'pending' : 'approved') };
+              blasts = [newBlast, ...blasts];
+              if (requiresApproval) {
+                openFeedback && openFeedback('info', 'Enviado', 'Disparo enviado para aprovação do coordenador.');
+                alert('Disparo enviado para aprovação do coordenador.');
+              } else {
+                openFeedback && openFeedback('success', 'Sucesso', 'Disparo criado com sucesso.');
+              }
+            } else {
+              alert('Erro ao criar disparo.');
+            }
+          } catch (err) {
+            console.error(err);
+            alert('Erro ao enviar imagem.');
+          }
+        } else {
+          console.debug('[Disparo] Sending JSON payload to', WEBHOOK_URL, { payload });
+          const resp = await fetch(WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          console.debug('[Disparo] Response status', resp.status, resp.statusText);
+          const result = await resp.json().catch(() => ({}));
+          if (resp.ok) {
+            sendingProgress = { sent: 1, total: 1, status: 'completed' };
+            const newBlast = { id: Date.now(), name: blastForm.name, user: userValue?.name || 'Usuário', total: result.total || uploadedNumbers.length || 0, success: result.success || 0, failure: result.failure || 0, date: new Date().toISOString(), status: (requiresApproval ? 'pending' : 'approved') };
+            blasts = [newBlast, ...blasts];
+            if (requiresApproval) {
+              openFeedback && openFeedback('info', 'Enviado', 'Disparo enviado para aprovação do coordenador.');
+              alert('Disparo enviado para aprovação do coordenador.');
+            } else {
+              openFeedback && openFeedback('success', 'Sucesso', 'Disparo criado com sucesso.');
+            }
+          } else {
+            console.error('[Disparo] erro novo-disparo', result);
+            alert('Erro ao criar disparo: ' + (result?.message || resp.statusText));
+          }
+        }
+      }
+
+      // Reset form on success
+      blastForm = { name: '', message: '', image: null, useAI: false, randomInterval: false, channel: '', leadSegment: 'all' };
+      imagePreview = '';
+      uploadedNumbers = [];
+      uploadedFile = null;
+      activeTab = 'lista';
     } catch (error) {
-      console.error('[v0] Error sending blast:', error);
+      console.error('[Disparo] Error sending blast:', error);
       alert('Erro ao enviar disparo.');
+    } finally {
       sending = false;
     }
   }
@@ -577,6 +794,51 @@
             </div>
 
             <div>
+              <label class="block text-sm font-medium text-white mb-2" for="blastSheet">Planilha de Números</label>
+              <div class="relative">
+                <input type="file" id="blastSheet" accept="*/*" class="hidden" onchange={(e) => { const input = e.target as HTMLInputElement; if (input.files && input.files[0]) handleSpreadsheetFile(input.files[0]); }} />
+                <label for="blastSheet" class="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-lg cursor-pointer hover:border-green-600 hover:bg-zinc-800/50 transition-all p-4">
+                  <div class="flex items-center gap-3">
+                    <svg class="w-8 h-8 text-zinc-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m10 12V4M3 20h18"/>
+                    </svg>
+                    <div class="text-sm text-zinc-400">Arraste e solte sua planilha ou clique para selecionar</div>
+                  </div>
+                </label>
+              </div>
+
+              {#if uploading}
+                <div class="text-xs text-zinc-400 mt-2">Processando...</div>
+              {/if}
+
+              {#if uploadedNumbers.length > 0}
+                <div class="mt-2 bg-zinc-800 border border-zinc-700 rounded p-2 text-xs text-zinc-300">
+                  <div class="font-medium mb-1">Preview (até 5)</div>
+                  <ul class="list-disc pl-4">
+                    {#each uploadedNumbers.slice(0,5) as n}
+                      <li>{n}</li>
+                    {/each}
+                  </ul>
+                  {#if uploadedNumbers.length > 5}
+                    <div class="mt-1 text-zinc-500">... e mais {uploadedNumbers.length - 5}</div>
+                  {/if}
+                  <div class="mt-2 text-right">
+                    <button onclick={() => uploadedNumbers = []} class="text-xs text-red-400 hover:text-red-300">Remover</button>
+                  </div>
+                </div>
+              {:else if uploadedFile}
+                <div class="mt-2 bg-zinc-800 border border-zinc-700 rounded p-2 text-xs text-zinc-300">
+                  <div class="font-medium mb-1">Arquivo carregado</div>
+                  <div class="text-zinc-200">{uploadedFile.name}</div>
+                  <div class="text-zinc-500 text-xs mt-1">Este arquivo será enviado ao backend para extração dos números.</div>
+                  <div class="mt-2 text-right">
+                    <button onclick={() => { uploadedFile = null; uploadedNumbers = []; }} class="text-xs text-red-400 hover:text-red-300">Remover</button>
+                  </div>
+                </div>
+              {/if}
+            </div>
+
+            <div>
               <label class="block text-sm font-medium text-white mb-2" for="blastChannel">Canal de Envio</label>
               <select
                 id="blastChannel"
@@ -584,13 +846,13 @@
                 class="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-green-600 focus:border-green-600"
               >
                 <option value="">Selecione um canal...</option>
-                {#each connections as conn}
-                  <option value={conn.id} disabled={conn.status !== 'connected'}>
-                    {conn.name} ({conn.number}) - {conn.status === 'connected' ? 'Conectado' : 'Desconectado'}
+                {#each allowedChannels as chan}
+                  <option value={chan.numero} disabled={chan.status && chan.status.toLowerCase() !== 'connected' && chan.status.toLowerCase() !== 'conectado'}>
+                    {chan.nomeConexao} ({chan.numero}) {chan.status ? `- ${chan.status}` : ''}
                   </option>
                 {/each}
-                {#if connections.length === 0}
-                  <option value="" disabled>Nenhuma conexão encontrada</option>
+                {#if allowedChannels.length === 0}
+                  <option value="" disabled>Nenhum canal de envio disponível</option>
                 {/if}
               </select>
               <div class="mt-2 text-right">
@@ -599,10 +861,17 @@
             </div>
 
             <button
-              onclick={handleSend}
+              onclick={() => handleSend(false)}
               class="w-full py-4 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors shadow-lg shadow-green-900/20"
             >
               Iniciar Disparo
+            </button>
+            <button
+              onclick={() => handleSend(true)}
+              class="w-full mt-2 py-2 bg-transparent border border-zinc-700 text-zinc-300 rounded-lg hover:border-green-600 hover:text-white transition-colors"
+              title="Forçar envio mesmo se usuário for funcionário (apenas para testes)"
+            >
+              Forçar Envio (teste)
             </button>
           </div>
 
