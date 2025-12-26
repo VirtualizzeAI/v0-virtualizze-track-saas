@@ -25,6 +25,9 @@
   // Lista State
   let blasts = $state([]);
   let loadingHistory = $state(false);
+  let openMenuId = $state(null as number | null);
+  let showBlastModal = $state(false);
+  let blastModalData = $state<any>(null);
 
   // Connections State
   let connections = $state([]);
@@ -538,6 +541,57 @@
     });
     
     alert('Disparo cancelado.');
+  }
+
+  async function viewBlastDetails(blastId: number) {
+    showBlastModal = false;
+    blastModalData = null;
+    const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/visualizar-disparo';
+    try {
+      const uid = userValue?.id ?? userValue?.userId ?? userValue?.userid ?? userValue?.user_id ?? null;
+      const payload = { id: blastId, userId: uid, userRole: userValue?.role ?? '', companyId: effectiveCompanyIdValue };
+
+      const resp = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await resp.json().catch(() => null);
+
+      if (!data) {
+        alert('Erro ao carregar visualização do disparo.');
+        return;
+      }
+
+      // Normalize expected fields: message/text and image (base64)
+      const message = data.message ?? data.mensagem ?? data.text ?? data.body ?? '';
+      let imageBase64 = data.image ?? data.imagem ?? data.image_base64 ?? data.base64 ?? null;
+
+      let imageDataUrl = null;
+      if (imageBase64) {
+        // If already a data URL, use as-is
+        if (String(imageBase64).startsWith('data:')) {
+          imageDataUrl = imageBase64;
+        } else {
+          // Try to guess mime from base64 header
+          const prefix = String(imageBase64).slice(0,5);
+          const mime = prefix.startsWith('/9j/') ? 'image/jpeg' : (prefix.startsWith('iVBOR') ? 'image/png' : 'image/png');
+          imageDataUrl = `data:${mime};base64,${imageBase64}`;
+        }
+      }
+
+      blastModalData = { message, imageDataUrl, raw: data };
+      showBlastModal = true;
+    } catch (error) {
+      console.error('[Disparo] Error viewing blast:', error);
+      alert('Erro ao carregar visualização do disparo.');
+    }
+  }
+
+  function closeBlastModal() {
+    showBlastModal = false;
+    blastModalData = null;
   }
 
   function downloadList(blastId: number) {
