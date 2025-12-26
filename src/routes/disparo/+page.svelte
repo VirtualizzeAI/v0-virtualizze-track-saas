@@ -26,6 +26,7 @@
   let blasts = $state([]);
   let loadingHistory = $state(false);
   let openMenuId = $state(null as number | null);
+  let menuPosition = $state({ x: 0, y: 0 });
   let showBlastModal = $state(false);
   let blastModalData = $state<any>(null);
 
@@ -48,6 +49,8 @@
   let sending = $state(false);
   let sendingProgress = $state({ sent: 0, total: 0, status: 'idle' }); // idle, sending, completed
   let imagePreview = $state('');
+  let showConfirmModal = $state(false);
+  let isForceSend = $state(false);
   // Uploaded spreadsheet numbers
   let uploadedNumbers = $state<string[]>([]);
   let uploading = $state(false);
@@ -352,34 +355,41 @@
     }
   }
 
-  async function handleSend(force = false) {
-    console.debug('[Disparo] handleSend called', { effectiveCompanyIdValue, userValue, blastForm, uploadedNumbers, uploadedFile });
-    try {
-      const domMsg = document.getElementById('blastMessage')?.value;
-      console.debug('[Disparo] DOM #blastMessage value:', domMsg);
-      console.debug('[Disparo] blastForm.message value:', blastForm.message);
-    } catch (err) {
-      console.warn('[Disparo] could not read DOM blastMessage', err);
-    }
-
-    if (!blastForm.message) {
-      console.warn('[Disparo] Aborting send: empty message');
-      alert('Por favor, digite uma mensagem.');
+  function handleSend(force = false) {
+    // 1. Validate Spreadsheet
+    if (uploadedNumbers.length === 0 && !uploadedFile) {
+      alert('Por favor, faça upload de uma planilha de números.');
       return;
     }
 
+    // 2. Validate Content (Message OR Image)
+    if (!blastForm.message && !blastForm.image) {
+      alert('Por favor, digite uma mensagem ou selecione uma imagem.');
+      return;
+    }
+
+    // 3. Validate Company/User
     if (!effectiveCompanyIdValue && !userValue?.companyId) {
-      console.warn('[Disparo] Aborting send: company not identified', { effectiveCompanyIdValue, userValue });
       alert('Erro: Empresa não identificada.');
       return;
     }
 
-    // Check plan limits
+    // 4. Validate Plan
     if (planUsage.disparo_limit > 0 && planUsage.disparos_used >= planUsage.disparo_limit) {
       alert('Limite de disparos do plano atingido!');
       return;
     }
 
+    isForceSend = force;
+    showConfirmModal = true;
+  }
+
+  async function executeSend() {
+    showConfirmModal = false;
+    const force = isForceSend;
+
+    console.debug('[Disparo] executeSend called', { effectiveCompanyIdValue, userValue, blastForm, uploadedNumbers, uploadedFile });
+    
     // Determine whether this send requires approval (user is funcionario and not forcing)
     const requiresApproval = (userValue?.role === 'funcionario') && !force;
 
@@ -391,6 +401,10 @@
     try {
       // Build payload
       const uid = userValue?.id ?? userValue?.userId ?? userValue?.userid ?? userValue?.user_id ?? null;
+      
+      // Find connection name from selected channel
+      const selectedConnection = allowedChannels.find(ch => ch.numero === blastForm.channel);
+      const channelName = selectedConnection?.nomeConexao || '';
 
       if (uploadedFile) {
         // Send FormData with file + metadata
@@ -399,6 +413,7 @@
         form.append('name', blastForm.name || '');
         form.append('message', blastForm.message || '');
         form.append('channel', blastForm.channel || '');
+        form.append('channelName', channelName);
         form.append('companyId', String(effectiveCompanyIdValue));
         form.append('userId', uid ? String(uid) : '');
         form.append('userRole', userValue?.role || '');
@@ -435,6 +450,7 @@
           name: blastForm.name,
           message: blastForm.message,
           channel: blastForm.channel,
+          channelName: channelName,
           companyId: effectiveCompanyIdValue,
           userId: uid,
           userRole: userValue?.role || '',
@@ -512,35 +528,89 @@
   async function approveBlast(blastId: number) {
     if (!confirm('Deseja aprovar este disparo?')) return;
     
-    // TODO: Call webhook to approve blast
-    // const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/leads-blast-approve';
+    const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/autorizar-disparos';
     
-    // Mock update
-    blasts = blasts.map(b => {
-      if (b.id === blastId) {
-        return { ...b, status: 'approved', total: 100, success: 100 }; // Simulate immediate success for now
+    try {
+      const uid = userValue?.id ?? userValue?.userId ?? userValue?.userid ?? userValue?.user_id ?? null;
+      const payload = {
+        companyId: effectiveCompanyIdValue,
+        userId: uid,
+        id: blastId,
+        userRole: userValue?.role ?? '',
+        autorizacao: 'aprovado'
+      };
+
+      const resp = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await resp.json().catch(() => ({}));
+
+      if (resp.ok) {
+        // Update local state
+        blasts = blasts.map(b => {
+          if (b.id === blastId) {
+            return { ...b, status: 'approved' };
+          }
+          return b;
+        });
+        alert('Disparo aprovado com sucesso!');
+        // Refresh list to get updated data
+        fetchBlasts();
+      } else {
+        console.error('[Disparo] Erro ao aprovar:', result);
+        alert('Erro ao aprovar disparo: ' + (result?.message || resp.statusText));
       }
-      return b;
-    });
-    
-    alert('Disparo aprovado e iniciado!');
+    } catch (error) {
+      console.error('[Disparo] Error approving blast:', error);
+      alert('Erro ao aprovar disparo.');
+    }
   }
 
   async function cancelBlast(blastId: number) {
-    if (!confirm('Deseja cancelar este disparo?')) return;
+    if (!confirm('Deseja reprovar este disparo?')) return;
     
-    // TODO: Call webhook to cancel blast
-    // const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/leads-blast-cancel';
+    const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/autorizar-disparos';
     
-    // Mock update
-    blasts = blasts.map(b => {
-      if (b.id === blastId) {
-        return { ...b, status: 'cancelled' };
+    try {
+      const uid = userValue?.id ?? userValue?.userId ?? userValue?.userid ?? userValue?.user_id ?? null;
+      const payload = {
+        companyId: effectiveCompanyIdValue,
+        userId: uid,
+        id: blastId,
+        userRole: userValue?.role ?? '',
+        autorizacao: 'rejeitado'
+      };
+
+      const resp = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await resp.json().catch(() => ({}));
+
+      if (resp.ok) {
+        // Update local state
+        blasts = blasts.map(b => {
+          if (b.id === blastId) {
+            return { ...b, status: 'cancelled' };
+          }
+          return b;
+        });
+        alert('Disparo reprovado com sucesso!');
+        // Refresh list to get updated data
+        fetchBlasts();
+      } else {
+        console.error('[Disparo] Erro ao reprovar:', result);
+        alert('Erro ao reprovar disparo: ' + (result?.message || resp.statusText));
       }
-      return b;
-    });
-    
-    alert('Disparo cancelado.');
+    } catch (error) {
+      console.error('[Disparo] Error canceling blast:', error);
+      alert('Erro ao reprovar disparo.');
+    }
   }
 
   async function viewBlastDetails(blastId: number) {
@@ -597,7 +667,91 @@
   function downloadList(blastId: number) {
     alert(`Baixando lista do disparo ${blastId}...`);
   }
+
+  function toggleMenu(event: MouseEvent, id: number) {
+    event.stopPropagation();
+    if (openMenuId === id) {
+      openMenuId = null;
+    } else {
+      const button = event.currentTarget as HTMLElement;
+      const rect = button.getBoundingClientRect();
+      
+      const menuWidth = 192; // 192px = w-48 (12rem)
+      const menuHeight = 180; // Approximate height of menu
+      const padding = 8; // Padding from edges
+      
+      // Calculate initial position
+      let x = rect.right - menuWidth;
+      let y = rect.bottom + padding;
+      
+      // Check if menu would overflow right edge
+      if (x + menuWidth > window.innerWidth - padding) {
+        x = window.innerWidth - menuWidth - padding;
+      }
+      
+      // Check if menu would overflow left edge
+      if (x < padding) {
+        x = padding;
+      }
+      
+      // Check if menu would overflow bottom edge
+      if (y + menuHeight > window.innerHeight - padding) {
+        // Position above the button instead
+        y = rect.top - menuHeight - padding;
+        
+        // If still overflows top, position at bottom with scroll
+        if (y < padding) {
+          y = window.innerHeight - menuHeight - padding;
+        }
+      }
+      
+      menuPosition = { x, y };
+      openMenuId = id;
+    }
+  }
+
+  function closeMenu() {
+    openMenuId = null;
+  }
+
+  async function startBlast(blastId: number) {
+    if (!confirm('Deseja iniciar este disparo agora?')) return;
+    
+    const WEBHOOK_URL = 'https://auto.agiussolar.cloud/webhook/iniciar-disparo';
+    
+    try {
+      const uid = userValue?.id ?? userValue?.userId ?? userValue?.userid ?? userValue?.user_id ?? null;
+      const payload = {
+        companyId: effectiveCompanyIdValue,
+        userId: uid,
+        id: blastId,
+        userRole: userValue?.role ?? ''
+      };
+
+      const resp = await fetch(WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const result = await resp.json().catch(() => ({}));
+
+      if (resp.ok) {
+        alert('Disparo iniciado com sucesso!');
+        // Refresh list to get updated data
+        fetchBlasts();
+      } else {
+        console.error('[Disparo] Erro ao iniciar:', result);
+        alert('Erro ao iniciar disparo: ' + (result?.message || resp.statusText));
+      }
+    } catch (error) {
+      console.error('[Disparo] Error starting blast:', error);
+      alert('Erro ao iniciar disparo.');
+    }
+  }
 </script>
+
+<svelte:window onclick={closeMenu} />
 
 <div class="flex min-h-screen bg-zinc-950">
   <Sidebar currentPath="/disparo" bind:collapsed={sidebarCollapsed} />
@@ -739,9 +893,9 @@
                           <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                             Pendente
                           </span>
-                        {:else if blast.status === 'cancelled'}
+                        {:else if blast.status === 'rejeitado'}
                           <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                            Cancelado
+                            Rejeitado
                           </span>
                         {:else}
                           <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -753,32 +907,15 @@
                       <td class="p-4 text-sm text-green-500 text-center font-medium">{blast.success}</td>
                       <td class="p-4 text-sm text-red-500 text-center font-medium">{blast.failure}</td>
                       <td class="p-4 text-right">
-                        {#if blast.status === 'pending' && isManagerValue}
-                          <div class="flex items-center justify-end gap-2">
-                            <button
-                              onclick={() => approveBlast(blast.id)}
-                              class="text-green-500 hover:text-green-400 text-sm font-medium"
-                            >
-                              Aprovar
-                            </button>
-                            <button
-                              onclick={() => cancelBlast(blast.id)}
-                              class="text-red-500 hover:text-red-400 text-sm font-medium"
-                            >
-                              Cancelar
-                            </button>
-                          </div>
-                        {:else}
-                          <button
-                            onclick={() => downloadList(blast.id)}
-                            class="text-green-500 hover:text-green-400 text-sm font-medium flex items-center justify-end gap-1 ml-auto"
-                          >
-                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
-                            </svg>
-                            Baixar
-                          </button>
-                        {/if}
+                        <button 
+                          onclick={(e) => toggleMenu(e, blast.id)}
+                          class="p-2 hover:bg-zinc-800 rounded-lg transition-colors text-zinc-400 hover:text-white"
+                          data-blast-id={blast.id}
+                        >
+                          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v.01M12 12v.01M12 19v.01M12 6a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2zm0 7a1 1 0 110-2 1 1 0 010 2z"/>
+                          </svg>
+                        </button>
                       </td>
                     </tr>
                   {:else}
@@ -949,6 +1086,160 @@
           </div>
         </div>
       {/if}
+    {/if}
+    <!-- Dropdown Menu (rendered at document level to avoid overflow issues) -->
+    {#if openMenuId !== null}
+      {#each blasts as blast}
+        {#if blast.id === openMenuId}
+          <div 
+            class="fixed w-48 bg-zinc-900 border border-zinc-700 rounded-lg shadow-xl z-[100] overflow-hidden"
+            style="left: {menuPosition.x}px; top: {menuPosition.y}px;"
+            onclick={(e) => e.stopPropagation()}
+          >
+            <div class="py-1">
+              <button
+                onclick={() => { viewBlastDetails(blast.id); closeMenu(); }}
+                class="w-full text-left px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/>
+                </svg>
+                Visualizar
+              </button>
+              
+              <button
+                onclick={() => { downloadList(blast.id); closeMenu(); }}
+                class="w-full text-left px-4 py-2 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-white flex items-center gap-2"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+                </svg>
+                Baixar Lista
+              </button>
+
+              {#if blast.status === 'aprovado'}
+                <div class="border-t border-zinc-800 my-1"></div>
+                <button
+                  onclick={() => { startBlast(blast.id); closeMenu(); }}
+                  class="w-full text-left px-4 py-2 text-sm text-green-500 hover:bg-zinc-800 hover:text-green-400 flex items-center gap-2 font-medium"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  Iniciar Disparo
+                </button>
+              {/if}
+
+              {#if blast.status === 'pending' && isManagerValue}
+                <div class="border-t border-zinc-800 my-1"></div>
+                <button
+                  onclick={() => { approveBlast(blast.id); closeMenu(); }}
+                  class="w-full text-left px-4 py-2 text-sm text-green-500 hover:bg-zinc-800 hover:text-green-400 flex items-center gap-2"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/>
+                  </svg>
+                  Aprovar
+                </button>
+                <button
+                  onclick={() => { cancelBlast(blast.id); closeMenu(); }}
+                  class="w-full text-left px-4 py-2 text-sm text-red-500 hover:bg-zinc-800 hover:text-red-400 flex items-center gap-2"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                  </svg>
+                  Reprovar
+                </button>
+              {/if}
+            </div>
+          </div>
+        {/if}
+      {/each}
+    {/if}
+
+    {#if showBlastModal && blastModalData}
+      <!-- Blast Details Modal -->
+      <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" onclick={closeBlastModal}></div>
+        
+        <div class="relative w-full max-w-lg bg-zinc-900 border border-zinc-800 rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
+          <!-- Header -->
+          <div class="flex items-center justify-between p-4 border-b border-zinc-800">
+            <h3 class="text-lg font-bold text-white">Detalhes do Disparo</h3>
+            <button onclick={closeBlastModal} class="text-zinc-400 hover:text-white transition-colors">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="p-6 overflow-y-auto">
+            {#if blastModalData.imageDataUrl}
+              <div class="mb-6 rounded-lg overflow-hidden bg-zinc-950 border border-zinc-800">
+                <img src={blastModalData.imageDataUrl} alt="Blast content" class="w-full h-auto object-contain max-h-[300px]" />
+              </div>
+            {/if}
+
+            <div class="space-y-2">
+              <label class="block text-sm font-medium text-zinc-400">Mensagem:</label>
+              <div class="p-4 bg-zinc-800/50 rounded-lg border border-zinc-800">
+                <p class="text-white whitespace-pre-wrap leading-relaxed">
+                  {blastModalData.message || 'Nenhuma mensagem de texto.'}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Footer -->
+          <div class="p-4 border-t border-zinc-800 flex justify-end">
+            <button
+              onclick={closeBlastModal}
+              class="px-4 py-2 bg-zinc-800 text-white rounded-lg hover:bg-zinc-700 transition-colors font-medium border border-zinc-700"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
+      </div>
+    {/if}
+    {#if showConfirmModal}
+      <!-- Confirmation Modal -->
+      <div class="fixed inset-0 z-[60] flex items-center justify-center p-4">
+        <div class="absolute inset-0 bg-black/80 backdrop-blur-sm" onclick={() => showConfirmModal = false}></div>
+        
+        <div class="relative w-full max-w-sm bg-zinc-900 border border-zinc-700 rounded-xl shadow-2xl p-6">
+          <div class="text-center mb-6">
+            <div class="w-16 h-16 bg-green-500/10 rounded-full flex items-center justify-center mx-auto mb-4">
+              <svg class="w-8 h-8 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+              </svg>
+            </div>
+            <h3 class="text-xl font-bold text-white mb-2">Confirmar Disparo?</h3>
+            <p class="text-zinc-400 text-sm">
+              Você está prestes a enviar mensagens para 
+              <span class="text-white font-medium">{uploadedNumbers.length > 0 ? uploadedNumbers.length : 'uma lista de'} contatos</span>.
+            </p>
+          </div>
+
+          <div class="space-y-3">
+            <button
+              onclick={executeSend}
+              class="w-full py-3 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors"
+            >
+              Confirmar e Enviar
+            </button>
+            <button
+              onclick={() => showConfirmModal = false}
+              class="w-full py-3 bg-zinc-800 text-zinc-300 font-medium rounded-lg hover:bg-zinc-700 transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      </div>
     {/if}
   </main>
 </div>
