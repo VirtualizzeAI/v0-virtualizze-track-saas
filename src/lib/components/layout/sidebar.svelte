@@ -14,6 +14,7 @@
   let companiesList = $state<Array<{id: number, name: string}>>([]);
   let selectedCompanyValue = $state<{id: number, name: string} | null>(null);
   let userValue = $state<any>(null);
+  let mobileOpen = $state(false);
 
   onMount(() => {
     const unsubUser = user.subscribe(value => {
@@ -68,6 +69,18 @@
         path: '/leads',
         icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z',
         ariaLabel: 'Leads'
+      },
+      {
+        name: 'Projetos',
+        path: '/projetos',
+        icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01',
+        ariaLabel: 'Projetos'
+      },
+      {
+        name: 'Clientes',
+        path: '/clientes',
+        icon: 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
+        ariaLabel: 'Clientes'
       }
     ];
 
@@ -117,9 +130,43 @@
     logout();
     goto('/');
   }
+
+  function handleNavClick() {
+    mobileOpen = false;
+  }
 </script>
 
-<aside class="bg-zinc-900 h-screen flex flex-col border-r-2 border-green-600 fixed left-0 top-0 overflow-hidden transition-all duration-300 {collapsed ? 'w-20' : 'w-64'} z-50">
+<!-- Mobile overlay -->
+{#if mobileOpen}
+  <div
+    class="fixed inset-0 bg-black/60 z-40 md:hidden"
+    onclick={() => mobileOpen = false}
+    role="button"
+    tabindex="-1"
+    aria-label="Fechar menu"
+    onkeydown={(e) => e.key === 'Escape' && (mobileOpen = false)}
+  ></div>
+{/if}
+
+<!-- Mobile top bar -->
+<div class="md:hidden fixed top-0 left-0 right-0 z-30 bg-zinc-900 border-b border-green-600/50 px-4 py-3 flex items-center gap-3">
+  <button
+    onclick={() => mobileOpen = !mobileOpen}
+    class="text-white p-1"
+    aria-label="Abrir menu"
+  >
+    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"/>
+    </svg>
+  </button>
+  <p class="text-sm font-bold text-white">Virtualizze Track</p>
+</div>
+
+<aside class="bg-zinc-900 h-screen flex flex-col border-r-2 border-green-600 fixed left-0 top-0 overflow-hidden transition-all duration-300
+  {collapsed ? 'w-20' : 'w-64'}
+  {mobileOpen ? 'translate-x-0' : '-translate-x-full'}
+  md:translate-x-0
+  z-50">
   <!-- Header -->
   <div class="p-6 border-b border-zinc-800 flex-shrink-0">
     <div class="flex items-center gap-3 {collapsed ? 'justify-center' : ''}">
@@ -222,7 +269,8 @@
     {#each getMenuItems() as item}
       <a
         href={item.path}
-        class="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors {collapsed ? 'justify-center' : ''} {currentPath === item.path
+        onclick={handleNavClick}
+        class="flex items-center gap-3 px-4 py-3 rounded-lg transition-colors {collapsed ? 'justify-center' : ''} {currentPath === item.path || currentPath.startsWith(item.path + '/')
           ? 'bg-green-600 text-white font-medium'
           : 'text-zinc-400 hover:bg-zinc-800 hover:text-white'}"
         title={collapsed ? item.name : ''}
@@ -242,7 +290,7 @@
   <div class="p-4 border-t border-zinc-800 flex-shrink-0 space-y-2">
     <button
       onclick={() => collapsed = !collapsed}
-      class="w-full flex items-center {collapsed ? 'justify-center' : 'justify-center'} gap-2 px-4 py-2 rounded-lg bg-green-600/20 hover:bg-green-600/30 text-green-500 transition-colors"
+      class="hidden md:flex w-full items-center {collapsed ? 'justify-center' : 'justify-center'} gap-2 px-4 py-2 rounded-lg bg-green-600/20 hover:bg-green-600/30 text-green-500 transition-colors"
       title={collapsed ? 'Expandir menu' : 'Recolher menu'}
       aria-label={collapsed ? 'Expandir menu' : 'Recolher menu'}
     >

@@ -5,6 +5,7 @@
   import Sidebar from '$lib/components/layout/sidebar.svelte';
   import PeriodSelector from '$lib/components/dashboard/period-selector.svelte';
   import StatCard from '$lib/components/dashboard/stat-card.svelte';
+  import { supabase } from '$lib/supabase';
 
   const { user, selectedCompany } = authStore;
 
@@ -18,6 +19,15 @@
   let isFranqueadoraLocal = $state(false);
   let selectedCompanyLocal = $state<{id: number, name: string} | null>(null);
   let companyIdToUse = $state<number | null>(null);
+
+  // Project stats
+  let projectStats = $state({
+    total: 0,
+    concluidas: 0,
+    em_andamento: 0,
+    finalizadas: 0,
+    atrasadas: 0
+  });
 
   let dashboardData = $state({
     totalLeads: 0,
@@ -57,6 +67,7 @@
         companyIdToUse = value.companyId;
         fetchDashboardData(selectedPeriod);
       }
+      fetchProjectStats();
     });
 
     const unsubCompany = selectedCompany.subscribe((company) => {
@@ -120,6 +131,34 @@
     fetchDashboardData(period);
   }
 
+  async function fetchProjectStats() {
+    try {
+      const today = new Date().toISOString().split('T')[0];
+
+      const [totalRes, concluidaRes, emAndamentoRes, atrasadaRes] = await Promise.all([
+        supabase.from('projects').select('id', { count: 'exact', head: true }),
+        supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('status', 'concluida'),
+        supabase.from('tasks').select('id', { count: 'exact', head: true }).eq('status', 'em_andamento'),
+        supabase.from('tasks').select('id', { count: 'exact', head: true }).lt('deadline', today).neq('status', 'concluida')
+      ]);
+
+      const finalizadasRes = await supabase
+        .from('projects')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'concluido');
+
+      projectStats = {
+        total: totalRes.count || 0,
+        concluidas: concluidaRes.count || 0,
+        em_andamento: emAndamentoRes.count || 0,
+        finalizadas: finalizadasRes.count || 0,
+        atrasadas: atrasadaRes.count || 0
+      };
+    } catch (e) {
+      // ignore if supabase not configured
+    }
+  }
+
   function nextPage() {
     if (currentPage < totalPages) {
       currentPage++;
@@ -150,7 +189,7 @@
 <div class="min-h-screen bg-zinc-950">
   <Sidebar currentPath="/dashboard" bind:collapsed={sidebarCollapsed} />
   
-  <main class="transition-all duration-300 {sidebarCollapsed ? 'ml-20' : 'ml-64'} p-8">
+  <main class="transition-all duration-300 md:{sidebarCollapsed ? 'ml-20' : 'ml-64'} p-4 md:p-8 pt-20 md:pt-8">
     <!-- Header -->
     <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
       <div>
@@ -179,6 +218,20 @@
           </span>
         </div>
       {/if}
+
+      <!-- Project Stats -->
+      <div class="mb-8">
+        <h2 class="text-lg font-semibold text-white mb-4">Projetos e Tarefas</h2>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <a href="/projetos" class="block">
+            <StatCard title="Projetos" value={projectStats.total} color="bg-blue-500" />
+          </a>
+          <StatCard title="Tarefas Concluídas" value={projectStats.concluidas} color="bg-green-500" />
+          <StatCard title="Em Andamento" value={projectStats.em_andamento} color="bg-yellow-500" />
+          <StatCard title="Finalizados" value={projectStats.finalizadas} color="bg-purple-500" />
+          <StatCard title="Atrasadas" value={projectStats.atrasadas} color="bg-red-500" />
+        </div>
+      </div>
 
       <!-- Period Selector -->
       <div class="mb-8">

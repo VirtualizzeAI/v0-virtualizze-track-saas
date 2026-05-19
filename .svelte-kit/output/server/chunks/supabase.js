@@ -1,0 +1,1 @@
+import{createClient as e}from"@supabase/supabase-js";console.warn("[Supabase] VITE_SUPABASE_URL ou VITE_SUPABASE_ANON_KEY não configurados. Crie um arquivo .env baseado no .env.example.");e("https://placeholder.supabase.co","placeholder");
